@@ -20,4 +20,5 @@ jobs:
       - name: Run tests
         env:
           FLASK_ENV: testing
-        run: pytest tests/ -v
+        run: |
+          python -m pytest tests/ -v
