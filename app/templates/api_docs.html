@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - API 文档{% endblock %}
+{% block page_title %}API 参考文档{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-header">接口分类</div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush" id="apiNav">
+                    <a href="#auth" class="list-group-item list-group-item-action">认证</a>
+                    <a href="#logs" class="list-group-item list-group-item-action">日志</a>
+                    <a href="#rules" class="list-group-item list-group-item-action">规则</a>
+                    <a href="#alerts" class="list-group-item list-group-item-action">告警</a>
+                    <a href="#ai" class="list-group-item list-group-item-action">AI 研判</a>
+                    <a href="#chains" class="list-group-item list-group-item-action">攻击链</a>
+                    <a href="#reports" class="list-group-item list-group-item-action">报告</a>
+                    <a href="#configs" class="list-group-item list-group-item-action">系统配置</a>
+                    <a href="#knowledge" class="list-group-item list-group-item-action">知识库</a>
+                    <a href="#users" class="list-group-item list-group-item-action">用户</a>
+                    <a href="#system" class="list-group-item list-group-item-action">系统</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-header">接口列表 <span class="badge bg-secondary ms-2">统一前缀 /api/v1</span></div>
+            <div class="card-body" id="apiContent">
+                <div class="alert alert-info">
+                    <strong>通用响应格式:</strong>
+                    <pre class="mb-0 mt-1" style="font-size:13px;">{"code": 0, "message": "success", "data": {}}</pre>
+                </div>
+
+                <div id="auth"><h5 class="mt-3 border-bottom pb-2">认证 <code class="ms-2">/auth</code></h5></div>
+                <table class="table table-sm">
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/auth/login</code></td><td>用户登录</td><td><small class="text-muted">无</small></td></tr>
+                    <tr><td><span class="badge bg-secondary">POST</span></td><td><code>/api/v1/auth/logout</code></td><td>用户登出</td><td><small class="text-muted">登录用户</small></td></tr>
+                </table>
+
+                <div id="logs"><h5 class="mt-4 border-bottom pb-2">日志 <code class="ms-2">/logs</code></h5></div>
+                <table class="table table-sm">
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/logs/import</code></td><td>上传日志文件</td><td>analyst/admin</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/logs/import/{id}/parse</code></td><td>解析日志</td><td>analyst/admin</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/logs</code></td><td>查询日志列表</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/logs/{id}</code></td><td>查询日志详情</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/logs/import/{id}</code></td><td>查询导入任务</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/logs/import</code></td><td>导入任务列表</td><td>viewer+</td></tr>
+                </table>
+
+                <div id="rules"><h5 class="mt-4 border-bottom pb-2">规则 <code class="ms-2">/rules</code></h5></div>
+                <table class="table table-sm">
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/rules</code></td><td>规则列表</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/rules</code></td><td>创建规则</td><td>admin</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/rules/{id}</code></td><td>规则详情</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-warning">PUT</span></td><td><code>/api/v1/rules/{id}</code></td><td>更新规则</td><td>admin</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/rules/{id}/toggle</code></td><td>启用/禁用</td><td>admin</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/rules/run</code></td><td>执行检测</td><td>analyst/admin</td></tr>
+                </table>
+
+                <div id="alerts"><h5 class="mt-4 border-bottom pb-2">告警 <code class="ms-2">/alerts</code></h5></div>
+                <table class="table table-sm">
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/alerts</code></td><td>告警列表（分页+筛选）</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/alerts/{id}</code></td><td>告警详情</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-warning">PATCH</span></td><td><code>/api/v1/alerts/{id}/status</code></td><td>更新状态</td><td>analyst/admin</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/alerts/batch-status</code></td><td>批量更新状态</td><td>analyst/admin</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/alerts/aggregate</code></td><td>聚合告警为事件</td><td>analyst/admin</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/alerts/deduplicate</code></td><td>告警去重</td><td>analyst/admin</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/alerts/trend</code></td><td>告警趋势统计</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/alerts/events</code></td><td>聚合事件列表</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/alerts/events/{id}</code></td><td>事件详情</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/alerts/recalculate-score/{id}</code></td><td>重算风险分</td><td>analyst/admin</td></tr>
+                </table>
+
+                <div id="ai"><h5 class="mt-4 border-bottom pb-2">AI 研判 <code class="ms-2">/ai</code></h5></div>
+                <table class="table table-sm">
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/ai/analyze/alert/{id}</code></td><td>单告警 AI 研判</td><td>analyst/admin</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/ai/analyze/chain/{id}</code></td><td>攻击链 AI 分析</td><td>analyst/admin</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/ai/analyses</code></td><td>AI 研判历史</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/ai/analyses/{id}</code></td><td>研判详情</td><td>viewer+</td></tr>
+                </table>
+
+                <div id="chains"><h5 class="mt-4 border-bottom pb-2">攻击链 <code class="ms-2">/attack-chains</code></h5></div>
+                <table class="table table-sm">
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/attack-chains/generate</code></td><td>生成攻击链</td><td>analyst/admin</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/attack-chains</code></td><td>攻击链列表</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/attack-chains/{id}</code></td><td>攻击链详情</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/attack-chains/{id}/ai-summary</code></td><td>AI 摘要</td><td>analyst/admin</td></tr>
+                </table>
+
+                <div id="reports"><h5 class="mt-4 border-bottom pb-2">报告 <code class="ms-2">/reports</code></h5></div>
+                <table class="table table-sm">
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/reports/generate</code></td><td>生成报告</td><td>analyst/admin</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/reports</code></td><td>报告列表</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/reports/{id}</code></td><td>报告详情</td><td>viewer+</td></tr>
+                </table>
+
+                <div id="configs"><h5 class="mt-4 border-bottom pb-2">系统配置 <code class="ms-2">/configs</code></h5></div>
+                <table class="table table-sm">
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/configs</code></td><td>查询配置列表</td><td>admin</td></tr>
+                    <tr><td><span class="badge bg-warning">PUT</span></td><td><code>/api/v1/configs/{key}</code></td><td>更新配置</td><td>admin</td></tr>
+                </table>
+
+                <div id="knowledge"><h5 class="mt-4 border-bottom pb-2">知识库 <code class="ms-2">/knowledge</code></h5></div>
+                <table class="table table-sm">
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/knowledge</code></td><td>知识列表</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/knowledge/{id}</code></td><td>知识详情</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/knowledge</code></td><td>创建知识</td><td>admin</td></tr>
+                    <tr><td><span class="badge bg-warning">PUT</span></td><td><code>/api/v1/knowledge/{id}</code></td><td>更新知识</td><td>admin</td></tr>
+                    <tr><td><span class="badge bg-danger">DELETE</span></td><td><code>/api/v1/knowledge/{id}</code></td><td>删除知识</td><td>admin</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/knowledge/load-files</code></td><td>从文件加载</td><td>admin</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/knowledge/search</code></td><td>搜索知识</td><td>viewer+</td></tr>
+                </table>
+
+                <div id="users"><h5 class="mt-4 border-bottom pb-2">用户 <code class="ms-2">/users</code></h5></div>
+                <table class="table table-sm">
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/users</code></td><td>用户列表</td><td>admin</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/users/{id}</code></td><td>用户详情</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/users</code></td><td>创建用户</td><td>admin</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/users/{id}/toggle-status</code></td><td>启用/禁用</td><td>admin</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/users/{id}/reset-password</code></td><td>重置密码</td><td>admin</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/users/roles</code></td><td>角色列表</td><td>viewer+</td></tr>
+                </table>
+
+                <div id="system"><h5 class="mt-4 border-bottom pb-2">系统 <code class="ms-2">/system</code></h5></div>
+                <table class="table table-sm">
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/dashboard/stats</code></td><td>仪表盘聚合数据</td><td>viewer+</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/system/health</code></td><td>健康检查</td><td>admin</td></tr>
+                    <tr><td><span class="badge bg-success">POST</span></td><td><code>/api/v1/system/demo/import</code></td><td>一键导入演示</td><td>admin</td></tr>
+                    <tr><td><span class="badge bg-primary">GET</span></td><td><code>/api/v1/system/audit-logs</code></td><td>审计日志</td><td>admin</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

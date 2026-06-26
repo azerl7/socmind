@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 事件详情{% endblock %}
+{% block page_title %}安全事件详情{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header"><span id="eventTitle">事件 #{{ event_id }}</span>
+                <div>
+                    <button class="btn btn-sm btn-primary" onclick="generateChain()"><i class="bi bi-diagram-3"></i> 生成攻击链</button>
+                    <button class="btn btn-sm btn-success" onclick="generateReport()"><i class="bi bi-file-earmark-text"></i> 生成报告</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="loading" id="eventLoading"><div class="spinner"></div><p>加载中...</p></div>
+                <div id="eventContent" style="display:none;">
+                    <table class="table table-bordered" id="eventInfoTable"></table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">关联告警列表</div>
+            <div class="card-body p-0">
+                <table class="table table-hover">
+                    <thead><tr><th>编号</th><th>标题</th><th>类型</th><th>等级</th><th>风险分</th><th>源 IP</th><th>时间</th></tr></thead>
+                    <tbody id="alertListBody"><tr><td colspan="7" class="text-center text-muted py-4">加载中...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">事件摘要</div>
+            <div class="card-body" id="eventSummary">
+                <p class="text-muted">加载中...</p>
+            </div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">操作</div>
+            <div class="card-body">
+                <button class="btn btn-primary w-100 mb-2" onclick="generateChain()"><i class="bi bi-diagram-3"></i> 生成攻击链</button>
+                <button class="btn btn-success w-100 mb-2" onclick="generateReport()"><i class="bi bi-file-earmark-text"></i> 生成报告</button>
+                <button class="btn btn-outline-secondary w-100" onclick="updateStatus('closed')">关闭事件</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const eventId = {{ event_id }};
+
+async function loadEvent() {
+    const resp = await apiGet(`/alerts/events/${eventId}`);
+    const e = resp?.data;
+    if (!e) { document.getElementById('eventLoading').innerHTML = '<p class="text-danger">事件不存在</p>'; return; }
+
+    document.getElementById('eventLoading').style.display = 'none';
+    document.getElementById('eventContent').style.display = 'block';
+    document.getElementById('eventTitle').textContent = e.title || `事件 #${eventId}`;
+
+    document.getElementById('eventInfoTable').innerHTML = `
+        <tr><th style="width:100px;">编号</th><td>${e.event_no || '-'}</td></tr>
+        <tr><th>标题</th><td><strong>${e.title}</strong></td></tr>
+        <tr><th>等级</th><td>${severityBadge(e.severity)} <strong class="ms-2">${e.risk_score}</strong>/100</td></tr>
+        <tr><th>源 IP</th><td><code>${e.src_ip || '-'}</code></td></tr>
+        <tr><th>资产</th><td>${e.asset || '-'}</td></tr>
+        <tr><th>状态</th><td>${statusBadge(e.status)}</td></tr>
+        <tr><th>时间范围</th><td>${fmtTime(e.start_time)} ~ ${fmtTime(e.end_time)}</td></tr>
+    `;
+
+    document.getElementById('eventSummary').innerHTML = `
+        <p>${e.summary || '无摘要'}</p>
+        <small class="text-muted">创建时间: ${fmtTime(e.created_at)}</small>
+    `;
+
+    const alerts = e.alerts || [];
+    const tbody = document.getElementById('alertListBody');
+    if (alerts.length) {
+        tbody.innerHTML = alerts.map(a => `<tr>
+            <td><small class="text-muted">${a.id}</small></td>
+            <td><a href="/alerts/${a.id}" class="text-decoration-none">${a.title}</a></td>
+            <td>${a.attack_type}</td>
+            <td>${severityBadge(a.severity)}</td><td><strong>${a.risk_score}</strong></td>
+            <td><code>${a.src_ip || '-'}</code></td>
+            <td><small>${fmtTime(a.event_time)}</small></td>
+        </tr>`).join('');
+    } else {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">无关联告警</td></tr>';
+    }
+}
+
+async function generateChain() {
+    const resp = await apiPost('/attack-chains/generate', { event_id: eventId });
+    if (resp?.data?.chain_id) {
+        showToast(`攻击链已生成: ${resp.data.chain_no}`);
+        window.open(`/chains/${resp.data.chain_id}`, '_blank');
+    } else {
+        showToast(resp?.message || '生成失败', 'error');
+    }
+}
+
+async function generateReport() {
+    const resp = await apiPost('/reports/generate', { report_type: 'chain', target_id: eventId });
+    if (resp?.data?.report_id) {
+        showToast(`报告已生成`);
+        window.open(`/reports/${resp.data.report_id}`, '_blank');
+    } else {
+        showToast(resp?.message || '生成失败', 'error');
+    }
+}
+
+async function updateStatus(status) {
+    // 更新事件下所有告警
+    const resp = await apiGet(`/alerts/events/${eventId}`);
+    const alerts = resp?.data?.alerts || [];
+    const ids = alerts.map(a => a.id);
+    if (ids.length) {
+        await apiPost('/alerts/batch-status', { alert_ids: ids, status });
+        showToast(`已 ${status} 事件下的 ${ids.length} 条告警`);
+    }
+}
+
+loadEvent();
+</script>
+{% endblock %}

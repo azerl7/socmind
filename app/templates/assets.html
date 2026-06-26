@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 资产管理{% endblock %}
+{% block page_title %}资产管理{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>资产列表</span>
+                <div>
+                    <button class="btn btn-sm btn-success" onclick="discoverAssets()"><i class="bi bi-search"></i> 自动发现</button>
+                    <button class="btn btn-sm btn-info" onclick="buildRelations()"><i class="bi bi-link"></i> 构建关联</button>
+                    <button class="btn btn-sm btn-primary" onclick="showTopology()"><i class="bi bi-diagram-3"></i> 拓扑视图</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="filter-bar mb-2">
+                    <select class="form-select form-select-sm" id="filterType" onchange="loadAssets(1)" style="width:140px;">
+                        <option value="">全部类型</option>
+                        <option value="host">主机</option>
+                        <option value="webapp">Web应用</option>
+                        <option value="database">数据库</option>
+                        <option value="external">外部IP</option>
+                        <option value="unknown">未知</option>
+                    </select>
+                    <input type="text" class="form-control form-control-sm" id="filterKeyword" placeholder="IP/主机名/标签">
+                    <select class="form-select form-select-sm" id="filterSort" onchange="loadAssets(1)" style="width:150px;">
+                        <option value="risk_score">按风险分</option>
+                        <option value="alert_count">按告警数</option>
+                        <option value="last_seen">最近活跃</option>
+                        <option value="asset_ip">按IP</option>
+                    </select>
+                    <button class="btn btn-sm btn-primary" onclick="loadAssets(1)"><i class="bi bi-search"></i> 搜索</button>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="table table-hover">
+                        <thead><tr>
+                            <th>IP</th><th>类型</th><th>主机名</th><th>风险分</th>
+                            <th>告警数</th><th>严重程度</th><th>最后活跃</th><th>操作</th>
+                        </tr></thead>
+                        <tbody id="assetTableBody"><tr><td colspan="8" class="text-center text-muted py-4">加载中...</td></tr></tbody>
+                    </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted" id="assetCountInfo"></small>
+                    <div id="assetPagination"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 拓扑模态框 -->
+<div class="modal fade" id="topologyModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">资产关联拓扑</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="height:600px;">
+                <div id="topologyChart" style="width:100%;height:100%;"></div>
+            </div>
+            <div class="modal-footer text-muted">
+                <small>节点大小 = 风险评分, 颜色 = 风险等级, 连线 = 攻击关联</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let topologyChart = null;
+
+async function loadAssets(page) {
+    const type = document.getElementById('filterType').value;
+    const keyword = document.getElementById('filterKeyword').value;
+    const sortBy = document.getElementById('filterSort').value;
+    const params = { page, page_size: 20 };
+    if (type) params.asset_type = type;
+    if (keyword) params.keyword = keyword;
+    if (sortBy) params.sort_by = sortBy;
+
+    const resp = await apiGet('/assets', params);
+    const data = resp?.data || { items: [], total: 0 };
+    const tbody = document.getElementById('assetTableBody');
+
+    if (data.items.length) {
+        tbody.innerHTML = data.items.map(a => {
+            const severityCls = a.risk_score >= 70 ? 'danger' : a.risk_score >= 40 ? 'warning' : a.risk_score >= 20 ? 'info' : 'secondary';
+            const typeIcons = { host: 'bi-pc-display', webapp: 'bi-globe', database: 'bi-database', external: 'bi-box-arrow-up-right' };
+            return `<tr>
+                <td><code>${a.asset_ip}</code></td>
+                <td><i class="bi ${typeIcons[a.asset_type] || 'bi-question-circle'}"></i> ${a.asset_type}</td>
+                <td>${a.hostname || '-'}</td>
+                <td><span class="badge bg-${severityCls}">${a.risk_score}</span></td>
+                <td>${a.alert_count}</td>
+                <td><span class="badge bg-${severityCls}">${a.criticality}</span></td>
+                <td><small>${fmtTime(a.last_seen)}</small></td>
+                <td><a href="/assets/${a.id}" class="btn btn-sm btn-outline-primary">详情</a></td>
+            </tr>`;
+        }).join('');
+    } else {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">暂无资产数据，点击"自动发现"从已有日志中提取</td></tr>';
+    }
+
+    document.getElementById('assetCountInfo').textContent = `共 ${data.total} 个资产`;
+    renderPagination(document.getElementById('assetPagination'), page, 20, data.total, loadAssets);
+}
+
+async function discoverAssets() {
+    showToast('正在自动发现资产...', 'info');
+    const resp = await apiPost('/assets/discover');
+    if (resp.code === 0) {
+        const d = resp.data;
+        showToast(`发现 ${d.created} 个新资产，更新 ${d.updated} 个现有资产`);
+        loadAssets(1);
+    } else {
+        showToast(resp.message || '发现失败', 'error');
+    }
+}
+
+async function buildRelations() {
+    showToast('正在构建资产关联关系...', 'info');
+    const resp = await apiPost('/assets/relations', { time_window_minutes: 1440 });
+    if (resp.code === 0) {
+        const d = resp.data;
+        showToast(`创建 ${d.created} 条关联，更新 ${d.updated} 条`);
+    } else {
+        showToast(resp.message || '构建失败', 'error');
+    }
+}
+
+async function showTopology() {
+    const modal = new bootstrap.Modal(document.getElementById('topologyModal'));
+    modal.show();
+
+    if (!topologyChart) {
+        topologyChart = echarts.init(document.getElementById('topologyChart'));
+    }
+    topologyChart.showLoading();
+
+    const resp = await apiGet('/assets/topology');
+    const data = resp?.data || { nodes: [], edges: [] };
+
+    if (data.nodes.length === 0) {
+        topologyChart.hideLoading();
+        topologyChart.setOption({
+            title: { text: '暂无关联系数据', left: 'center', top: 'center', textStyle: { color: '#7f8c8d' } }
+        });
+        return;
+    }
+
+    // 分类
+    const categories = [{ name: 'host' }, { name: 'webapp' }, { name: 'database' }, { name: 'external' }, { name: 'unknown' }];
+    data.nodes.forEach(n => {
+        n.category = categories.findIndex(c => c.name === n.category);
+        if (n.category < 0) n.category = 4;
+    });
+
+    topologyChart.hideLoading();
+    topologyChart.setOption({
+        title: { text: '资产关联拓扑', left: 'center' },
+        tooltip: { formatter: p => p.dataType === 'node' ? `<strong>${p.name}</strong><br/>风险分: ${p.data.risk_score || '-'}` : `${p.data.source} → ${p.data.target}` },
+        legend: { data: categories.map(c => c.name), bottom: 0 },
+        series: [{
+            type: 'graph',
+            layout: 'force',
+            data: data.nodes,
+            edges: data.edges,
+            categories: categories,
+            roam: true,
+            draggable: true,
+            force: { repulsion: 300, edgeLength: 150 },
+            label: { show: true, position: 'right', fontSize: 10 },
+            edgeLabel: { show: true, formatter: p => p.data.label || '', fontSize: 9 },
+            lineStyle: { curveness: 0.3 },
+            emphasis: { focus: 'adjacency' },
+        }]
+    });
+}
+
+loadAssets(1);
+</script>
+{% endblock %}

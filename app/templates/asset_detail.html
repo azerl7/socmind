@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 资产详情{% endblock %}
+{% block page_title %}资产详情{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">资产信息</div>
+            <div class="card-body" id="assetInfo">
+                <div class="loading"><div class="spinner"></div></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">关联拓扑</div>
+            <div class="card-body" id="relationGraph" style="height:300px;"></div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">关联告警</div>
+            <div class="card-body" style="overflow-x:auto;">
+                <table class="table table-hover">
+                    <thead><tr><th>告警编号</th><th>标题</th><th>类型</th><th>严重等级</th><th>风险分</th><th>时间</th></tr></thead>
+                    <tbody id="alertTableBody"><tr><td colspan="6" class="text-center text-muted py-4">加载中...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">关系列表</div>
+            <div class="card-body" style="overflow-x:auto;">
+                <h6>出站关系（该资产攻击的目标）</h6>
+                <table class="table table-sm" id="outgoingTable">
+                    <thead><tr><th>目标资产</th><th>类型</th><th>关联方式</th><th>可信度</th><th>告警数</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+                <h6>入站关系（攻击该资产的来源）</h6>
+                <table class="table table-sm" id="incomingTable">
+                    <thead><tr><th>来源资产</th><th>类型</th><th>关联方式</th><th>可信度</th><th>告警数</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let relationChart = null;
+const assetId = {{ asset_id }};
+
+async function loadAssetDetail() {
+    const resp = await apiGet(`/assets/${assetId}`);
+    if (resp.code !== 0 || !resp.data) {
+        document.getElementById('assetInfo').innerHTML = '<div class="alert alert-danger">资产不存在</div>';
+        return;
+    }
+
+    const d = resp.data;
+    const a = d.asset;
+
+    const riskCls = a.risk_score >= 70 ? 'danger' : a.risk_score >= 40 ? 'warning' : a.risk_score >= 20 ? 'info' : 'secondary';
+    const statusCls = a.is_active ? 'success' : 'secondary';
+    const criticalityCls = a.criticality === 'high' ? 'danger' : a.criticality === 'medium' ? 'warning' : 'info';
+
+    document.getElementById('assetInfo').innerHTML = `
+        <table class="table table-sm">
+            <tr><td>IP</td><td><code>${a.asset_ip}</code></td></tr>
+            <tr><td>类型</td><td>${a.asset_type}</td></tr>
+            <tr><td>主机名</td><td>${a.hostname || '-'}</td></tr>
+            <tr><td>风险分</td><td><span class="badge bg-${riskCls}">${a.risk_score}</span></td></tr>
+            <tr><td>严重程度</td><td><span class="badge bg-${criticalityCls}">${a.criticality || 'medium'}</span></td></tr>
+            <tr><td>状态</td><td><span class="badge bg-${statusCls}">${a.is_active ? '活跃' : '非活跃'}</span></td></tr>
+            <tr><td>告警数</td><td>${a.alert_count}</td></tr>
+            <tr><td>首次发现</td><td><small>${fmtTime(a.first_seen)}</small></td></tr>
+            <tr><td>最后活跃</td><td><small>${fmtTime(a.last_seen)}</small></td></tr>
+            <tr><td>标签</td><td>${(a.tags || []).map(t => `<span class="badge bg-secondary">${t}</span>`).join(' ') || '-'}</td></tr>
+        </table>
+    `;
+
+    // 告警列表
+    const alerts = d.recent_alerts || [];
+    const alertBody = document.getElementById('alertTableBody');
+    if (alerts.length) {
+        alertBody.innerHTML = alerts.map(al => `<tr>
+            <td><small>${al.alert_no}</small></td>
+            <td><a href="/alerts/${al.id}">${al.title}</a></td>
+            <td>${al.attack_type}</td>
+            <td>${severityBadge(al.severity)}</td>
+            <td><span class="badge bg-${al.risk_score >= 70 ? 'danger' : al.risk_score >= 40 ? 'warning' : 'info'}">${al.risk_score}</span></td>
+            <td><small>${fmtTime(al.event_time)}</small></td>
+        </tr>`).join('');
+    } else {
+        alertBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">暂无关联告警</td></tr>';
+    }
+
+    // 关系列表
+    const outgoing = d.outgoing_relations || [];
+    const incoming = d.incoming_relations || [];
+    const otBody = document.getElementById('outgoingTable').querySelector('tbody');
+    const itBody = document.getElementById('incomingTable').querySelector('tbody');
+
+    if (outgoing.length) {
+        otBody.innerHTML = outgoing.map(r => `<tr>
+            <td><code>${r.dst_asset?.asset_ip || '-'}</code></td>
+            <td>${r.dst_asset?.asset_type || '-'}</td>
+            <td>${r.relation_type}</td>
+            <td>${r.confidence}</td>
+            <td>${r.alert_count}</td>
+        </tr>`).join('');
+    } else { otBody.innerHTML = '<tr><td colspan="5" class="text-muted">暂无出站关系</td></tr>'; }
+
+    if (incoming.length) {
+        itBody.innerHTML = incoming.map(r => `<tr>
+            <td><code>${r.src_asset?.asset_ip || '-'}</code></td>
+            <td>${r.src_asset?.asset_type || '-'}</td>
+            <td>${r.relation_type}</td>
+            <td>${r.confidence}</td>
+            <td>${r.alert_count}</td>
+        </tr>`).join('');
+    } else { itBody.innerHTML = '<tr><td colspan="5" class="text-muted">暂无入站关系</td></tr>'; }
+
+    // 关系图
+    renderRelationGraph(a, outgoing, incoming);
+}
+
+function renderRelationGraph(asset, outgoing, incoming) {
+    if (!relationChart) {
+        relationChart = echarts.init(document.getElementById('relationGraph'));
+    }
+
+    const nodes = [{ id: asset.asset_ip, name: asset.asset_ip, symbolSize: 30, category: 0, itemStyle: { color: '#e74c3c' } }];
+    const edges = [];
+    const seen = new Set();
+    seen.add(asset.asset_ip);
+
+    outgoing.forEach(r => {
+        const targetIp = r.dst_asset?.asset_ip;
+        if (targetIp && !seen.has(targetIp)) {
+            seen.add(targetIp);
+            nodes.push({ id: targetIp, name: targetIp, symbolSize: 20, category: 1, itemStyle: { color: '#f39c12' } });
+        }
+        if (targetIp) edges.push({ source: asset.asset_ip, target: targetIp });
+    });
+
+    incoming.forEach(r => {
+        const sourceIp = r.src_asset?.asset_ip;
+        if (sourceIp && !seen.has(sourceIp)) {
+            seen.add(sourceIp);
+            nodes.push({ id: sourceIp, name: sourceIp, symbolSize: 20, category: 2, itemStyle: { color: '#3498db' } });
+        }
+        if (sourceIp) edges.push({ source: sourceIp, target: asset.asset_ip });
+    });
+
+    relationChart.setOption({
+        series: [{
+            type: 'graph',
+            layout: 'force',
+            data: nodes,
+            edges: edges,
+            categories: [{ name: '当前资产' }, { name: '攻击目标' }, { name: '攻击来源' }],
+            roam: true,
+            label: { show: true, fontSize: 9 },
+            force: { repulsion: 200 },
+            emphasis: { focus: 'adjacency' },
+        }]
+    });
+}
+
+loadAssetDetail();
+</script>
+{% endblock %}

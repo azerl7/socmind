@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 知识库{% endblock %}
+{% block page_title %}知识库{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <span>安全知识文档</span>
+                <div>
+                    <button class="btn btn-sm btn-outline-success" onclick="loadFromFiles()"><i class="bi bi-folder2-open"></i> 从文件加载</button>
+                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addDocModal"><i class="bi bi-plus-lg"></i> 新增</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="filter-bar">
+                    <select class="form-select form-select-sm" id="filterDocType" onchange="loadDocs(1)">
+                        <option value="">全部分类</option>
+                        <option value="attack">攻击技术</option>
+                        <option value="vuln">漏洞信息</option>
+                        <option value="response">应急响应</option>
+                        <option value="policy">安全策略</option>
+                    </select>
+                    <input type="text" class="form-control form-control-sm" id="filterKeyword" placeholder="搜索标题/内容">
+                    <button class="btn btn-sm btn-primary" onclick="loadDocs(1)"><i class="bi bi-search"></i> 搜索</button>
+                </div>
+                <div id="docList"></div>
+                <div id="knowledgePagination" class="mt-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">文档分类</div>
+            <div class="card-body">
+                <div class="mb-2"><span class="badge bg-danger me-2">attack</span> 攻击技术（ATT&CK、漏洞利用）</div>
+                <div class="mb-2"><span class="badge bg-warning me-2">vuln</span> 漏洞信息（CVE、补丁）</div>
+                <div class="mb-2"><span class="badge bg-success me-2">response</span> 应急响应（处置手册）</div>
+                <div class="mb-2"><span class="badge bg-info me-2">policy</span> 安全策略（规范、模板）</div>
+                <hr>
+                <div id="docStats"><small class="text-muted">加载中...</small></div>
+            </div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">知识检索测试</div>
+            <div class="card-body">
+                <div class="input-group">
+                    <input type="text" class="form-control" id="ragQuery" placeholder="输入关键词测试检索">
+                    <button class="btn btn-primary" onclick="testRAG()">检索</button>
+                </div>
+                <div id="ragResult" class="mt-2" style="font-size:13px;max-height:300px;overflow-y:auto;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新增文档弹窗 -->
+<div class="modal fade" id="addDocModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">新增知识文档</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addDocForm">
+                    <div class="mb-3">
+                        <label class="form-label">标题</label>
+                        <input type="text" class="form-control" id="docTitle" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">分类</label>
+                        <select class="form-select" id="docType">
+                            <option value="attack">攻击技术</option>
+                            <option value="vuln">漏洞信息</option>
+                            <option value="response">应急响应</option>
+                            <option value="policy">安全策略</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">内容 (Markdown)</label>
+                        <textarea class="form-control" id="docContent" rows="10" required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-primary" onclick="addDoc()">创建</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadDocs(page) {
+    const docType = document.getElementById('filterDocType').value;
+    const keyword = document.getElementById('filterKeyword').value;
+    const params = { page, page_size: 10 };
+    if (docType) params.doc_type = docType;
+    if (keyword) params.keyword = keyword;
+
+    const resp = await apiGet('/knowledge', params);
+    const data = resp?.data || { items: [], total: 0 };
+    const container = document.getElementById('docList');
+
+    if (data.items.length) {
+        container.innerHTML = data.items.map(d => `
+            <div class="card mb-2">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="badge bg-${d.doc_type === 'attack' ? 'danger' : d.doc_type === 'vuln' ? 'warning' : d.doc_type === 'response' ? 'success' : 'info'} me-1">${d.doc_type}</span>
+                            <strong>${d.title}</strong>
+                            <small class="text-muted ms-2">${d.source || ''}</small>
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteDoc(${d.id})"><i class="bi bi-trash"></i></button>
+                        </div>
+                    </div>
+                    <div class="mt-1" style="font-size:13px;color:#666;">${(d.content || '').substring(0, 200)}${(d.content || '').length > 200 ? '...' : ''}</div>
+                    <small class="text-muted">${fmtTime(d.created_at)}</small>
+                </div>
+            </div>
+        `).join('');
+    } else {
+        container.innerHTML = '<p class="text-muted text-center py-4">暂无知识文档，可点击「从文件加载」或手动添加</p>';
+    }
+
+    renderPagination(document.getElementById('knowledgePagination'), page, 10, data.total, loadDocs);
+
+    // 更新统计
+    document.getElementById('docStats').innerHTML = `<small class="text-muted">共 ${data.total} 篇文档</small>`;
+}
+
+async function loadFromFiles() {
+    const resp = await apiPost('/knowledge/load-files');
+    if (resp.code === 0) { showToast(resp.data.message); loadDocs(1); }
+    else showToast(resp.message, 'error');
+}
+
+async function addDoc() {
+    const title = document.getElementById('docTitle').value.trim();
+    const content = document.getElementById('docContent').value.trim();
+    const docType = document.getElementById('docType').value;
+    if (!title || !content) return showToast('标题和内容不能为空', 'warning');
+    const resp = await apiPost('/knowledge', { title, content, doc_type: docType });
+    if (resp.code === 0) {
+        showToast('文档已创建');
+        bootstrap.Modal.getInstance(document.getElementById('addDocModal')).hide();
+        document.getElementById('addDocForm').reset();
+        loadDocs(1);
+    } else showToast(resp.message, 'error');
+}
+
+async function deleteDoc(id) {
+    if (!confirm('确认删除这篇文档？')) return;
+    const resp = await apiDelete(`/knowledge/${id}`);
+    // 用 fetch 直接 DELETE
+    const r = await fetch(`${API_BASE}/knowledge/${id}`, { method: 'DELETE' });
+    const result = await r.json();
+    if (result.code === 0) { showToast('已删除'); loadDocs(1); }
+    else showToast(result.message, 'error');
+}
+
+async function testRAG() {
+    const q = document.getElementById('ragQuery').value.trim();
+    if (!q) return showToast('请输入关键词', 'warning');
+    document.getElementById('ragResult').innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0 auto;"></div>';
+    const resp = await apiGet('/knowledge/search', { q, limit: 3 });
+    if (resp.code === 0) {
+        document.getElementById('ragResult').innerHTML = `<pre style="font-size:12px;white-space:pre-wrap;">${resp.data.content || '无匹配结果'}</pre>`;
+    } else {
+        document.getElementById('ragResult').innerHTML = `<p class="text-muted">${resp.message}</p>`;
+    }
+}
+
+loadDocs(1);
+</script>
+{% endblock %}

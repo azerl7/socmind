@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 个人设置{% endblock %}
+{% block page_title %}个人设置{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">用户信息</div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr><td>用户名</td><td><strong>{{ current_user.username }}</strong></td></tr>
+                    <tr><td>昵称</td><td>{{ current_user.nickname or '-' }}</td></tr>
+                    <tr><td>邮箱</td><td>{{ current_user.email or '-' }}</td></tr>
+                    <tr><td>角色</td><td>{% for r in current_user.roles %}<span class="badge bg-info me-1">{{ r.role_name }}</span>{% endfor %}</td></tr>
+                    <tr><td>上次登录</td><td><small>{{ current_user.last_login_at.strftime('%Y-%m-%d %H:%M:%S') if current_user.last_login_at else '首次登录' }}</small></td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">界面偏好</div>
+            <div class="card-body">
+                <form id="prefForm">
+                    <div class="mb-3">
+                        <label class="form-label">每页显示条数</label>
+                        <select class="form-select" id="pref_page_size">
+                            <option value="10">10</option>
+                            <option value="20" selected>20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">仪表盘默认时间范围（天）</label>
+                        <select class="form-select" id="pref_dashboard_days">
+                            <option value="1">1 天</option>
+                            <option value="7" selected>7 天</option>
+                            <option value="30">30 天</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">告警筛选默认等级</label>
+                        <select class="form-select" id="pref_default_severity">
+                            <option value="">全部</option>
+                            <option value="critical">严重</option>
+                            <option value="high">高危</option>
+                            <option value="medium">中危</option>
+                            <option value="low">低危</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">保存设置</button>
+                </form>
+                <div id="prefResult" class="mt-2"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadPreferences() {
+    const resp = await apiGet('/users/preferences');
+    const prefs = resp?.data || {};
+    if (prefs.page_size) document.getElementById('pref_page_size').value = prefs.page_size;
+    if (prefs.dashboard_days) document.getElementById('pref_dashboard_days').value = prefs.dashboard_days;
+    if (prefs.default_severity) document.getElementById('pref_default_severity').value = prefs.default_severity;
+}
+
+document.getElementById('prefForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = {
+        page_size: document.getElementById('pref_page_size').value,
+        dashboard_days: document.getElementById('pref_dashboard_days').value,
+        default_severity: document.getElementById('pref_default_severity').value,
+    };
+    const resp = await apiPut('/users/preferences', data);
+    if (resp.code === 0) {
+        showToast('设置已保存');
+    } else {
+        showToast(resp.message || '保存失败', 'error');
+    }
+});
+
+loadPreferences();
+</script>
+{% endblock %}

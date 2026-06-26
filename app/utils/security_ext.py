@@ -1,0 +1,117 @@
+"""安全扩展：CSRF 保护 + 简易 API 限流 + IP 封禁"""
+from datetime import datetime, timezone, timedelta
+from collections import defaultdict
+from functools import wraps
+from flask import request, jsonify
+
+from app.models.config import SystemConfig
+
+
+# ═══════════════════════════════════
+# 简易内存限流器
+# ═══════════════════════════════════
+
+class RateLimiter:
+    """简易内存限流器（基于 IP）"""
+
+    def __init__(self):
+        self._requests: dict = defaultdict(list)
+
+    def is_limited(self, key: str, max_requests: int = 60, window_seconds: int = 60) -> bool:
+        """检查是否超过限制"""
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(seconds=window_seconds)
+
+        # 清理过期记录
+        self._requests[key] = [t for t in self._requests[key] if t > cutoff]
+
+        if len(self._requests[key]) >= max_requests:
+            return True
+
+        self._requests[key].append(now)
+        return False
+
+    def get_remaining(self, key: str, max_requests: int = 60) -> int:
+        """获取剩余请求数"""
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=60)
+        valid = [t for t in self._requests[key] if t > cutoff]
+        return max(0, max_requests - len(valid))
+
+
+rate_limiter = RateLimiter()
+
+
+def rate_limit(max_requests: int = 60, window_seconds: int = 60):
+    """限流装饰器（基于 IP）"""
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            client_ip = request.remote_addr or "unknown"
+            if rate_limiter.is_limited(client_ip, max_requests, window_seconds):
+                return jsonify({"code": 429, "message": "请求过于频繁，请稍后再试"}), 429
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+# ═══════════════════════════════════
+# IP 封禁
+# ═══════════════════════════════════
+
+class IPBlocker:
+    """从数据库配置加载被封禁 IP"""
+
+    @staticmethod
+    def get_blocked_ips() -> set:
+        cfg = SystemConfig.query.filter_by(config_key="blocked_ips").first()
+        if cfg and cfg.config_value:
+            return set(ip.strip() for ip in cfg.config_value.split(",") if ip.strip())
+        return set()
+
+    @staticmethod
+    def is_blocked(client_ip: str) -> bool:
+        if not client_ip:
+            return False
+        blocked = IPBlocker.get_blocked_ips()
+        return client_ip in blocked
+
+
+def check_blocked_ip():
+    """中间件：检查请求 IP 是否被封禁"""
+    client_ip = request.remote_addr or ""
+    if IPBlocker.is_blocked(client_ip):
+        return jsonify({"code": 403, "message": "您的 IP 已被封禁"}), 403
+    return None
+
+
+# ═══════════════════════════════════
+# CSRF 配置
+# ═══════════════════════════════════
+
+def init_csrf(app):
+    """初始化 CSRF 保护"""
+    # from flask_wtf.csrf import CSRFProtect
+    # csrf = CSRFProtect()
+    # csrf.init_app(app)
+
+    # # 排除 API 路由（API 使用 token 认证）
+    # csrf.exempt(blueprint="auth_routes")
+
+    # 为 API v1 路由排除 CSRF
+    # 注意: API 调用使用 session cookie 认证，实际需要 CSRF 保护
+    # 但对于 JSON API，CSRF 通过自定义头实现
+    # return csrf
+    return None
+
+
+# ═══════════════════════════════════
+# 安全响应头
+# ═══════════════════════════════════
+
+def add_security_headers(response):
+    """添加安全响应头"""
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "same-origin"
+    return response

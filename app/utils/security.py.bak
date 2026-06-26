@@ -1,0 +1,25 @@
+"""编号生成与安全工具"""
+from datetime import datetime, timezone
+
+
+def _generate_no(prefix: str) -> str:
+    now = datetime.now(timezone.utc)
+    date_str = now.strftime("%Y%m%d")
+    seq = abs(hash(f"{prefix}-{now.isoformat()}")) % 10000
+    return f"{prefix}-{date_str}-{seq:04d}"
+
+
+def generate_alert_no() -> str:
+    return _generate_no("ALERT")
+
+
+def generate_event_no() -> str:
+    return _generate_no("EVENT")
+
+
+def generate_chain_no() -> str:
+    return _generate_no("CHAIN")
+
+
+def generate_report_no() -> str:
+    return _generate_no("REPORT")

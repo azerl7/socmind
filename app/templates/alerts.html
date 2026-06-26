@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 告警中心{% endblock %}
+{% block page_title %}告警中心{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>告警列表</span>
+        <div>
+            <div class="btn-group me-1">
+                <button class="btn btn-sm btn-outline-info dropdown-toggle" data-bs-toggle="dropdown">导出</button>
+                <ul class="dropdown-menu">
+                    <li> <a class="dropdown-item" href="javascript:void(0)" onclick="exportAlerts('csv')">导出 CSV</a></li>
+                    <li> <a class="dropdown-item" href="javascript:void(0)" onclick="exportAlerts('json')">导出 JSON</a></li>
+                </ul>
+            </div>
+            <button class="btn btn-sm btn-outline-danger" onclick="batchClose()">批量关闭</button>
+            <button class="btn btn-sm btn-outline-warning" onclick="batchFP()">批量标记误报</button>
+            <button class="btn btn-sm btn-outline-success" onclick="deduplicate()">去重</button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="filter-bar">
+            <select class="form-select form-select-sm" id="filterSeverity" onchange="loadAlerts(1)">
+                <option value="">全部等级</option>
+                <option value="critical">严重</option>
+                <option value="high">高危</option>
+                <option value="medium">中危</option>
+                <option value="low">低危</option>
+            </select>
+            <select class="form-select form-select-sm" id="filterStatus" onchange="loadAlerts(1)">
+                <option value="">全部状态</option>
+                <option value="new">未处理</option>
+                <option value="in_progress">研判中</option>
+                <option value="confirmed">已确认</option>
+                <option value="false_positive">误报</option>
+                <option value="closed">已关闭</option>
+            </select>
+            <select class="form-select form-select-sm" id="filterType" onchange="loadAlerts(1)">
+                <option value="">全部类型</option>
+            </select>
+            <input type="text" class="form-control form-control-sm" id="filterIP" placeholder="源 IP" onchange="loadAlerts(1)">
+            <button class="btn btn-sm btn-primary" onclick="loadAlerts(1)"><i class="bi bi-search"></i> 搜索</button>
+        </div>
+
+        <div style="overflow-x:auto;">
+            <table class="table table-hover">
+                <thead><tr>
+                    <th><input type="checkbox" id="selectAll" onchange="toggleAll()"></th>
+                    <th>告警编号</th>
+                    <th>标题</th>
+                    <th>类型</th>
+                    <th>等级</th>
+                    <th>风险分</th>
+                    <th>源 IP</th>
+                    <th>状态</th>
+                    <th>时间</th>
+                    <th>操作</th>
+                </tr></thead>
+                <tbody id="alertTableBody"><tr><td colspan="10" class="text-center text-muted py-4">加载中...</td></tr></tbody>
+            </table>
+        </div>
+        <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted" id="alertCountInfo"></small>
+            <div id="alertPagination"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentPage = 1;
+const PAGE_SIZE = 20;
+let selectedIds = new Set();
+
+function toggleAll() { selectedIds.clear();
+    const checked = document.getElementById('selectAll').checked;
+    document.querySelectorAll('.alert-checkbox').forEach(cb => { cb.checked = checked; if (checked) selectedIds.add(cb.value); });
+}
+
+function toggleOne(id) { const cb = document.querySelector(`.alert-checkbox[value="${id}"]`);
+    if (cb.checked) selectedIds.add(id); else selectedIds.delete(id);
+}
+
+async function loadAlerts(page) {
+    currentPage = page;
+    const severity = document.getElementById('filterSeverity').value;
+    const status = document.getElementById('filterStatus').value;
+    const attackType = document.getElementById('filterType').value;
+    const srcIp = document.getElementById('filterIP').value;
+    const params = { page, page_size: PAGE_SIZE };
+    if (severity) params.severity = severity;
+    if (status) params.status = status;
+    if (attackType) params.attack_type = attackType;
+    if (srcIp) params.src_ip = srcIp;
+
+    const resp = await apiGet('/alerts', params);
+    const data = resp?.data || { items: [], total: 0 };
+    const tbody = document.getElementById('alertTableBody');
+
+    if (data.items.length) {
+        tbody.innerHTML = data.items.map(a => `<tr>
+            <td><input type="checkbox" class="alert-checkbox" value="${a.id}" onchange="toggleOne(${a.id})"></td>
+            <td><small class="text-muted">${a.alert_no || '-'}</small></td>
+            <td><a href="/alerts/${a.id}" class="text-decoration-none fw-medium">${a.title}</a></td>
+            <td>${a.attack_type}</td>
+            <td>${severityBadge(a.severity)}</td>
+            <td><strong>${a.risk_score}</strong></td>
+            <td><code>${a.src_ip || '-'}</code></td>
+            <td>${statusBadge(a.status)}</td>
+            <td><small class="text-muted">${fmtTime(a.event_time)}</small></td>
+            <td>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">操作</button>
+                    <ul class="dropdown-menu" style="min-width:auto;">
+                        <li><a class="dropdown-item" href="/alerts/${a.id}">详情</a></li>
+                        <li> <a class="dropdown-item" href="javascript:void(0)" onclick="updateStatus(${a.id},'confirmed')">确认</a></li>
+                        <li> <a class="dropdown-item" href="javascript:void(0)" onclick="updateStatus(${a.id},'false_positive')">标记误报</a></li>
+                        <li> <a class="dropdown-item" href="javascript:void(0)" onclick="updateStatus(${a.id},'closed')">关闭</a></li>
+                    </ul>
+                </div>
+            </td>
+        </tr>`).join('');
+    } else {
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">暂无告警数据</td></tr>';
+    }
+
+    document.getElementById('alertCountInfo').textContent = `共 ${data.total} 条记录`;
+    renderPagination(document.getElementById('alertPagination'), page, PAGE_SIZE, data.total, loadAlerts);
+}
+
+async function updateStatus(id, status) {
+    await apiPatch(`/alerts/${id}/status`, { status });
+    showToast('状态更新成功');
+    loadAlerts(currentPage);
+}
+
+async function batchClose() {
+    if (!selectedIds.size) return showToast('请先选择告警', 'warning');
+    await apiPost('/alerts/batch-status', { alert_ids: [...selectedIds], status: 'closed' });
+    showToast(`已关闭 ${selectedIds.size} 条告警`);
+    selectedIds.clear(); loadAlerts(currentPage);
+}
+
+async function batchFP() {
+    if (!selectedIds.size) return showToast('请先选择告警', 'warning');
+    await apiPost('/alerts/batch-status', { alert_ids: [...selectedIds], status: 'false_positive' });
+    showToast(`已标记 ${selectedIds.size} 条误报`);
+    selectedIds.clear(); loadAlerts(currentPage);
+}
+
+async function deduplicate() {
+    const resp = await apiPost('/alerts/deduplicate');
+    showToast(`去重完成，删除 ${resp?.data?.deleted_count | 0} 条重复告警`);
+    loadAlerts(currentPage);
+}
+
+function exportAlerts(format) {
+    const params = new URLSearchParams();
+    const sev = document.getElementById('filterSeverity').value;
+    const st = document.getElementById('filterStatus').value;
+    if (sev) params.set('severity', sev);
+    if (st) params.set('status', st);
+    params.set('_t', Date.now());
+    const url = `/api/v1/export/alerts/${format}?${params.toString()}`;
+    window.open(url, '_blank');
+}
+
+// 加载类型选项
+async function loadTypes() {
+    const resp = await apiGet('/alerts/trend?days=30');
+    const types = resp?.data?.by_attack_type || [];
+    const sel = document.getElementById('filterType');
+    types.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.type; opt.textContent = `${t.type} (${t.count})`;
+        sel.appendChild(opt);
+    });
+}
+
+loadAlerts(1);
+loadTypes();
+</script>
+{% endblock %}

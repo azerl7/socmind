@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 安全事件{% endblock %}
+{% block page_title %}安全事件{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span>聚合安全事件</span>
+        <button class="btn btn-sm btn-primary" onclick="aggregateAlerts()"><i class="bi bi-diagram-2"></i> 聚合告警</button>
+    </div>
+    <div class="card-body">
+        <div style="overflow-x:auto;">
+            <table class="table table-hover">
+                <thead><tr>
+                    <th>事件编号</th><th>标题</th><th>等级</th><th>风险分</th><th>源 IP</th>
+                    <th>告警数</th><th>时间范围</th><th>状态</th><th>操作</th>
+                </tr></thead>
+                <tbody id="eventTableBody"><tr><td colspan="9" class="text-center text-muted py-4">加载中...</td></tr></tbody>
+            </table>
+        </div>
+        <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted" id="eventCountInfo"></small>
+            <div id="eventPagination"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadEvents(page) {
+    const resp = await apiGet('/alerts/events', { page, page_size: 20 });
+    const data = resp?.data || { items: [], total: 0 };
+    const tbody = document.getElementById('eventTableBody');
+
+    if (data.items.length) {
+        tbody.innerHTML = data.items.map(e => `<tr>
+            <td><small class="text-muted">${e.event_no || '-'}</small></td>
+            <td><a href="/alerts/events/${e.id}" class="text-decoration-none fw-medium">${e.title}</a></td>
+            <td>${severityBadge(e.severity)}</td>
+            <td><strong>${e.risk_score}</strong></td>
+            <td><code>${e.src_ip || '-'}</code></td>
+            <td><span class="badge bg-info">${e.alert_count || '-'}</span></td>
+            <td><small class="text-muted">${fmtTime(e.start_time)} ~ ${fmtTime(e.end_time)}</small></td>
+            <td>${statusBadge(e.status)}</td>
+            <td><a href="/alerts/events/${e.id}" class="btn btn-sm btn-outline-primary">详情</a></td>
+        </tr>`).join('');
+    } else {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">暂无聚合事件，可点击「聚合告警」生成</td></tr>';
+    }
+
+    document.getElementById('eventCountInfo').textContent = `共 ${data.total} 条记录`;
+    renderPagination(document.getElementById('eventPagination'), page, 20, data.total, loadEvents);
+}
+
+async function aggregateAlerts() {
+    const resp = await apiPost('/alerts/aggregate', {});
+    if (resp.code === 0) {
+        const d = resp.data;
+        if (d && d.event_id) {
+            showToast(`事件已创建: ${d.event_no}，包含 ${d.alert_count} 条告警`);
+            loadEvents(1);
+        } else {
+            showToast('没有符合条件的告警进行聚合', 'info');
+        }
+    } else {
+        showToast(resp.message, 'error');
+    }
+}
+
+loadEvents(1);
+</script>
+{% endblock %}

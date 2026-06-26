@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 仪表盘{% endblock %}
+{% block page_title %}仪表盘{% endblock %}
+
+{% block content %}
+<!-- 统计卡片 -->
+<div class="row g-3 mb-4" id="statCards">
+    <div class="col-md-3">
+        <div class="stat-card" style="background:#e8f5e9;">
+            <div class="stat-icon" style="background:#c8e6c9;color:#2e7d32;"><i class="bi bi-journal-text"></i></div>
+            <div class="stat-info"><div class="stat-number" id="statLogs">-</div><div class="stat-label">日志总数</div></div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card" style="background:#fff3e0;">
+            <div class="stat-icon" style="background:#ffe0b2;color:#e65100;"><i class="bi bi-shield-exclamation"></i></div>
+            <div class="stat-info"><div class="stat-number" id="statAlerts">-</div><div class="stat-label">告警总数</div></div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card" style="background:#fde8e8;">
+            <div class="stat-icon" style="background:#ffcdd2;color:#c62828;"><i class="bi bi-exclamation-triangle"></i></div>
+            <div class="stat-info"><div class="stat-number" id="statHighRisk">-</div><div class="stat-label">高危及以上</div></div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card" style="background:#e3f2fd;">
+            <div class="stat-icon" style="background:#bbdefb;color:#1565c0;"><i class="bi bi-diagram-3"></i></div>
+            <div class="stat-info"><div class="stat-number" id="statChains">-</div><div class="stat-label">攻击链</div></div>
+        </div>
+    </div>
+</div>
+
+<!-- 快捷操作 -->
+<div class="row g-2 mb-4">
+    <div class="col-12">
+        <div class="d-flex flex-wrap gap-2">
+            <a href="/logs" class="btn btn-outline-primary btn-sm"><i class="bi bi-upload"></i> 导入日志</a>
+            <a href="/rules" class="btn btn-outline-warning btn-sm"><i class="bi bi-play-fill"></i> 执行检测</a>
+            <a href="/alerts" class="btn btn-outline-danger btn-sm"><i class="bi bi-shield-exclamation"></i> 查看告警</a>
+            <a href="/chains" class="btn btn-outline-info btn-sm"><i class="bi bi-diagram-3"></i> 攻击链</a>
+            <a href="/reports" class="btn btn-outline-success btn-sm"><i class="bi bi-file-earmark-text"></i> 报告中心</a>
+            <a href="/configs" class="btn btn-outline-secondary btn-sm"><i class="bi bi-rocket-takeoff"></i> 导入演示数据</a>
+        </div>
+    </div>
+</div>
+
+<!-- 趋势 + 风险仪表 -->
+<div class="row g-3 mb-4">
+    <div class="col-md-7">
+        <div class="card"><div class="card-header">告警趋势 (近7天)</div>
+            <div class="card-body"><div id="trendChart" style="height:260px;"></div></div>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="card"><div class="card-header text-center py-2" style="font-size:13px;">安全风险评分</div>
+                    <div class="card-body py-2"><div id="riskGauge" style="height:150px;"></div></div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card"><div class="card-header text-center py-2" style="font-size:13px;">未处理告警</div>
+                    <div class="card-body py-2 text-center">
+                        <div style="font-size:48px;font-weight:700;color:#e74c3c;" id="statUnhandled">-</div>
+                        <small class="text-muted">条待处理</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">告警等级分布</div>
+            <div class="card-body py-2"><div id="severityChart" style="height:100px;"></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- 下方：类型分布 + 最近告警 + 攻击链 -->
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card"><div class="card-header">告警类型分布</div>
+            <div class="card-body"><div id="typeChart" style="height:250px;"></div></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card"><div class="card-header"><span>最近告警</span><a href="/alerts" class="btn btn-sm btn-outline-primary">更多</a></div>
+            <div class="card-body p-0">
+                <table class="table" id="recentAlerts"><tbody><tr><td class="text-center text-muted py-4">加载中...</td></tr></tbody></table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card"><div class="card-header"><span>最近攻击链</span><a href="/chains" class="btn btn-sm btn-outline-primary">更多</a></div>
+            <div class="card-body p-0">
+                <table class="table" id="recentChains"><tbody><tr><td class="text-center text-muted py-4">加载中...</td></tr></tbody></table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadDashboard() {
+    const [statsResp, trendResp] = await Promise.all([
+        apiGet('/dashboard/stats'),
+        apiGet('/alerts/trend?days=7'),
+    ]);
+
+    const stats = statsResp?.data || {};
+    document.getElementById('statLogs').textContent = stats.logs?.total || 0;
+    document.getElementById('statAlerts').textContent = stats.alerts?.total || 0;
+    document.getElementById('statHighRisk').textContent = stats.alerts?.high_risk || 0;
+    document.getElementById('statChains').textContent = stats.attack_chains?.total || 0;
+    document.getElementById('statUnhandled').textContent = stats.alerts?.unhandled || 0;
+
+    // ── 趋势折线图 ──
+    const trendData = trendResp?.data?.by_day || [];
+    const chart1 = echarts.getInstanceByDom(document.getElementById('trendChart')) ||
+                   echarts.init(document.getElementById('trendChart'));
+    chart1.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: 40, right: 10, bottom: 20, top: 10 },
+        xAxis: { type: 'category', data: trendData.map(d => d.date), axisLabel: { fontSize: 11 } },
+        yAxis: { type: 'value', minInterval: 1 },
+        series: [{
+            type: 'line', smooth: true, data: trendData.map(d => d.count),
+            lineStyle: { color: '#3a7bf7', width: 3 },
+            areaStyle: { color: 'rgba(58,123,247,0.12)' },
+            itemStyle: { color: '#3a7bf7' },
+            markLine: {
+                data: [{ type: 'average', name: '平均值' }],
+                lineStyle: { color: '#e74c3c', type: 'dashed' },
+                label: { formatter: '均值: {c}', fontSize: 11 },
+            },
+        }],
+    });
+
+    // ── 风险仪表盘 ──
+    const alertTotal = stats.alerts?.total || 0;
+    const highRisk = stats.alerts?.high_risk || 0;
+    const riskScore = alertTotal > 0 ? Math.min(100, Math.round((highRisk / alertTotal) * 50 + Math.log10(alertTotal + 1) * 15)) : 0;
+    const chartGauge = echarts.getInstanceByDom(document.getElementById('riskGauge')) ||
+                       echarts.init(document.getElementById('riskGauge'));
+    chartGauge.setOption({
+        series: [{
+            type: 'gauge',
+            center: ['50%', '65%'],
+            radius: '90%',
+            startAngle: 200, endAngle: -20,
+            min: 0, max: 100,
+            splitNumber: 5,
+            progress: { show: true, width: 8 },
+            axisLine: {
+                lineStyle: {
+                    width: 8,
+                    color: [
+                        [0.25, '#27ae60'], [0.5, '#f39c12'],
+                        [0.75, '#e67e22'], [1, '#e74c3c'],
+                    ],
+                },
+            },
+            axisTick: { show: false },
+            splitLine: { show: false },
+            axisLabel: { show: false },
+            detail: {
+                offsetCenter: [0, 10],
+                fontSize: 20,
+                formatter: '{value}',
+                color: riskScore > 60 ? '#e74c3c' : riskScore > 30 ? '#f39c12' : '#27ae60',
+            },
+            data: [{ value: riskScore }],
+        }],
+    });
+
+    // ── 等级分布条形图 ──
+    const severityData = trendResp?.data?.by_severity || [];
+    const sevOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+    const sortedSev = [...severityData].sort((a, b) => (sevOrder[a.severity] || 99) - (sevOrder[b.severity] || 99));
+    const chartSev = echarts.getInstanceByDom(document.getElementById('severityChart')) ||
+                     echarts.init(document.getElementById('severityChart'));
+    chartSev.setOption({
+        tooltip: { trigger: 'axis', formatter: (p) => `${p[0].name}: ${p[0].value} 条` },
+        grid: { left: 10, right: 10, top: 5, bottom: 5 },
+        xAxis: { type: 'category', data: sortedSev.map(s => ({ critical: '严重', high: '高危', medium: '中危', low: '低危' })[s.severity] || s.severity), axisLabel: { fontSize: 11 } },
+        yAxis: { type: 'value', show: false, minInterval: 1 },
+        series: [{
+            type: 'bar', barWidth: '50%',
+            data: sortedSev.map(s => ({
+                value: s.count,
+                itemStyle: { color: ({ critical: '#e74c3c', high: '#e67e22', medium: '#f39c12', low: '#27ae60' })[s.severity] || '#888' },
+            })),
+            label: { show: true, position: 'top', fontSize: 12, fontWeight: 'bold' },
+        }],
+    });
+
+    // ── 类型分布饼图 ──
+    const typeData = trendResp?.data?.by_attack_type || [];
+    const chartType = echarts.getInstanceByDom(document.getElementById('typeChart')) ||
+                      echarts.init(document.getElementById('typeChart'));
+    chartType.setOption({
+        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+        series: [{
+            type: 'pie', radius: ['40%', '70%'],
+            data: typeData.map(d => ({ name: d.type, value: d.count })),
+            label: { fontSize: 11, formatter: '{b}\n{d}%' },
+            color: ['#3a7bf7', '#e74c3c', '#f39c12', '#27ae60', '#9b59b6', '#1abc9c', '#e67e22', '#2ecc71'],
+        }],
+    });
+
+    // ── 最近告警 ──
+    const recentAlerts = stats.recent_alerts || [];
+    const alertTbody = document.querySelector('#recentAlerts tbody');
+    if (recentAlerts.length) {
+        alertTbody.innerHTML = recentAlerts.map(a => `<tr>
+            <td>${severityBadge(a.severity)}</td>
+            <td><a href="/alerts/${a.id}" class="text-decoration-none">${a.title}</a></td>
+            <td><small class="text-muted">${fmtTime(a.event_time)}</small></td>
+        </tr>`).join('');
+    } else {
+        alertTbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-4">暂无告警</td></tr>';
+    }
+
+    // ── 最近攻击链 ──
+    const chainsResp = await apiGet('/attack-chains?page_size=5');
+    const chainItems = chainsResp?.data?.items || [];
+    const chainTbody = document.querySelector('#recentChains tbody');
+    if (chainItems.length) {
+        chainTbody.innerHTML = chainItems.map(c => `<tr>
+            <td><a href="/chains/${c.id}" class="text-decoration-none">${c.title}</a></td>
+            <td>${severityBadge(c.confidence)}</td>
+            <td><small class="text-muted">${fmtTime(c.created_at)}</small></td>
+        </tr>`).join('');
+    } else {
+        chainTbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-4">暂无攻击链</td></tr>';
+    }
+}
+
+loadDashboard();
+</script>
+{% endblock %}

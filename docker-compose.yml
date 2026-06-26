@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: socmind-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: "1"
+      MYSQL_DATABASE: socmind
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  flask:
+    build: .
+    container_name: socmind-flask
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "5000:5000"
+    environment:
+      FLASK_ENV: development
+      DATABASE_URL: "mysql+pymysql://root:1@mysql:3306/socmind?charset=utf8mb4"
+      SECRET_KEY: "socmind-docker-secret-key-change-in-production"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./demo_data:/app/demo_data
+    command: >
+      sh -c "
+        echo '初始化数据库...' &&
+        python scripts/init_db.py &&
+        echo '生成演示日志...' &&
+        python scripts/generate_demo_logs.py 2>/dev/null || true &&
+        echo '启动服务...' &&
+        gunicorn --bind 0.0.0.0:5000 --workers 2 --access-logfile - --error-logfile - app:app
+      "
+    restart: unless-stopped
+
+volumes:
+  mysql_data:

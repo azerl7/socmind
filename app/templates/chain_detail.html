@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 攻击链详情{% endblock %}
+{% block page_title %}攻击链详情{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <span id="chainTitle">攻击链 #{{ chain_id }}</span>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="generateAISummary()"><i class="bi bi-robot"></i> AI 摘要</button>
+                    <button class="btn btn-sm btn-success" onclick="generateReport()"><i class="bi bi-file-earmark-text"></i> 生成报告</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="loading" id="chainLoading"><div class="spinner"></div><p>加载中...</p></div>
+                <div id="chainContent" style="display:none;">
+                    <!-- 统计条 -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-3"><div class="p-3 bg-light rounded text-center"><small class="text-muted">阶段数</small><div class="fw-bold fs-5" id="infoStageCount">-</div></div></div>
+                        <div class="col-md-3"><div class="p-3 bg-light rounded text-center"><small class="text-muted">风险评分</small><div class="fw-bold fs-5" id="infoRiskScore">-</div></div></div>
+                        <div class="col-md-3"><div class="p-3 bg-light rounded text-center"><small class="text-muted">可信度</small><div class="fw-bold fs-5" id="infoConfidence">-</div></div></div>
+                        <div class="col-md-3"><div class="p-3 bg-light rounded text-center"><small class="text-muted">源 IP</small><div class="fw-bold fs-5" id="infoSrcIP">-</div></div></div>
+                    </div>
+                    <!-- 攻击链图谱 -->
+                    <h6 class="mb-2">攻击链时间线</h6>
+                    <div id="chainTimelineChart" style="height:200px;"></div>
+                    <!-- 攻击流程图 -->
+                    <h6 class="mb-2 mt-3">攻击阶段流程</h6>
+                    <div id="chainFlowChart" style="height:120px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header">阶段详情</div>
+            <div class="card-body" id="stageDetails"><p class="text-muted">加载中...</p></div>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header">AI 分析</div>
+            <div class="card-body" id="aiSummaryBox">
+                <p class="text-muted mb-0">点击「AI 摘要」按钮进行分析</p>
+            </div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">基本信息</div>
+            <div class="card-body">
+                <table class="table table-sm" id="chainInfoTable"></table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const chainId = {{ chain_id }};
+
+// 攻击阶段颜色映射
+const STAGE_COLORS = {
+    recon: { bg: '#e3f2fd', border: '#1976d2', text: '#0d47a1', label: '侦察' },
+    sensitive_path: { bg: '#fff3e0', border: '#f57c00', text: '#e65100', label: '敏感路径' },
+    exploit_attempt: { bg: '#fde8e8', border: '#d32f2f', text: '#b71c1c', label: '漏洞尝试' },
+    abnormal_login: { bg: '#fce4ec', border: '#c2185b', text: '#880e4f', label: '异常登录' },
+    suspicious_action: { bg: '#f3e5f5', border: '#7b1fa2', text: '#4a148c', label: '可疑行为' },
+    data_access: { bg: '#e8f5e9', border: '#388e3c', text: '#1b5e20', label: '数据访问' },
+    default: { bg: '#f5f5f5', border: '#757575', text: '#424242', label: '未知' },
+};
+
+function getStageStyle(code) { return STAGE_COLORS[code] || STAGE_COLORS.default; }
+
+async function loadChain() {
+    const resp = await apiGet(`/attack-chains/${chainId}`);
+    const c = resp?.data;
+    if (!c) { document.getElementById('chainLoading').innerHTML = '<p class="text-danger">攻击链不存在</p>'; return; }
+
+    document.getElementById('chainLoading').style.display = 'none';
+    document.getElementById('chainContent').style.display = 'block';
+    document.getElementById('chainTitle').textContent = c.title || `攻击链 #${chainId}`;
+
+    // 统计信息
+    document.getElementById('infoStageCount').textContent = c.stage_count || 0;
+    document.getElementById('infoRiskScore').textContent = c.risk_score || 0;
+    document.getElementById('infoConfidence').innerHTML = severityBadge(c.confidence);
+    document.getElementById('infoSrcIP').textContent = c.src_ip || '-';
+
+    // 基本信息表
+    document.getElementById('chainInfoTable').innerHTML = `
+        <tr><th style="width:80px;">编号</th><td>${c.chain_no || '-'}</td></tr>
+        <tr><th>源 IP</th><td><code>${c.src_ip || '-'}</code></td></tr>
+        <tr><th>目标</th><td>${c.target_asset || '-'}</td></tr>
+        <tr><th>时间范围</th><td><small>${fmtTime(c.start_time)} ~ ${fmtTime(c.end_time)}</small></td></tr>
+        <tr><th>创建时间</th><td><small>${fmtTime(c.created_at)}</small></td></tr>
+    `;
+
+    const nodes = c.nodes || [];
+    if (!nodes.length) {
+        document.getElementById('stageDetails').innerHTML = '<p class="text-muted">暂无节点数据</p>';
+        document.getElementById('chainTimelineChart').innerHTML = '<p class="text-muted text-center pt-5">暂无数据</p>';
+        document.getElementById('chainFlowChart').innerHTML = '';
+        return;
+    }
+
+    // ── 时间线散点图 ──
+    const timelineData = nodes.map((n, i) => ({
+        value: [n.event_time || c.created_at, i],
+        stage: n.stage_code,
+        title: n.node_title,
+        time: fmtTime(n.event_time),
+        evidence: (n.evidence || '').substring(0, 100),
+        itemStyle: { color: getStageStyle(n.stage_code).border },
+    }));
+
+    const chart1 = echarts.init(document.getElementById('chainTimelineChart'));
+    chart1.setOption({
+        tooltip: {
+            trigger: 'item',
+            formatter: (p) => `<strong>${p.data.title}</strong><br>阶段: ${p.data.stage}<br>时间: ${p.data.time}<br>${p.data.evidence}`,
+        },
+        grid: { left: 50, right: 20, top: 10, bottom: 30 },
+        xAxis: { type: 'time', axisLabel: { fontSize: 11 } },
+        yAxis: {
+            type: 'category', show: false,
+            data: nodes.map(() => ''),
+        },
+        series: [{
+            type: 'scatter',
+            data: timelineData,
+            symbolSize: (v) => Math.max(16, 24 - nodes.length),
+            itemStyle: { borderWidth: 2, borderColor: '#fff' },
+        }],
+    });
+
+    // ── 水平流程图 ──
+    const flowData = nodes.map((n, i) => ({
+        name: getStageStyle(n.stage_code).label,
+        stage: n.stage_code,
+        title: n.node_title,
+        itemStyle: {
+            color: getStageStyle(n.stage_code).bg,
+            borderColor: getStageStyle(n.stage_code).border,
+            borderWidth: 2,
+        },
+    }));
+
+    const links = [];
+    for (let i = 0; i < nodes.length - 1; i++) {
+        links.push({ source: i, target: i + 1 });
+    }
+
+    const chart2 = echarts.init(document.getElementById('chainFlowChart'));
+    chart2.setOption({
+        tooltip: {
+            formatter: (p) => {
+                const d = nodes[p.dataIndex];
+                return `<strong>${getStageStyle(d.stage_code).label}</strong><br>${d.node_title}<br><small>${fmtTime(d.event_time)}</small>`;
+            },
+        },
+        series: [{
+            type: 'graph',
+            layout: 'none',
+            data: flowData.map((d, i) => ({
+                ...d,
+                x: (i / Math.max(nodes.length - 1, 1)) * 90 + 5,
+                y: 50,
+                symbolSize: [120, 50],
+                label: { show: true, position: 'inside', fontSize: 12, fontWeight: 'bold', color: d.itemStyle.borderColor },
+            })),
+            edges: links.map(l => ({
+                source: l.source,
+                target: l.target,
+                lineStyle: { color: '#bbb', width: 2, curveness: 0 },
+                symbol: ['none', 'arrow'],
+                symbolSize: 8,
+            })),
+            edgeSymbol: ['none', 'arrow'],
+            edgeSymbolSize: [0, 10],
+            roam: false,
+            draggable: false,
+        }],
+    });
+
+    // ── 阶段详情卡片 ──
+    const stagesHtml = nodes.map(n => {
+        const style = getStageStyle(n.stage_code);
+        return `<div class="card mb-2 border" style="border-left: 4px solid ${style.border} !important;">
+            <div class="card-body py-2">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <span class="badge me-1" style="background:${style.border};color:#fff;">${style.label}</span>
+                        <strong>${n.node_title}</strong>
+                    </div>
+                    <small class="text-muted">${fmtTime(n.event_time)}</small>
+                </div>
+                ${n.node_desc ? `<small class="text-muted">${n.node_desc}</small>` : ''}
+                ${n.evidence ? `<pre class="mt-1 mb-0" style="font-size:12px;background:#f8f9fa;padding:6px;border-radius:4px;max-height:80px;overflow-y:auto;">${n.evidence}</pre>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+    document.getElementById('stageDetails').innerHTML = stagesHtml;
+}
+
+async function generateAISummary() {
+    document.getElementById('aiSummaryBox').innerHTML = '<div class="loading"><div class="spinner"></div><p>AI 分析中...</p></div>';
+    const resp = await apiPost(`/attack-chains/${chainId}/ai-summary`);
+    const r = resp?.data || {};
+    document.getElementById('aiSummaryBox').innerHTML = `
+        <div class="mb-2">${r.summary || 'AI 分析完成'}</div>
+        ${r.suggestion ? `<div class="mt-2 p-2 bg-light rounded"><strong>建议:</strong><br>${r.suggestion}</div>` : ''}
+        ${!r.summary ? '<p class="text-muted mb-0">AI 服务暂不可用，请在系统配置中配置 OpenAI API Key</p>' : ''}
+    `;
+}
+
+async function generateReport() {
+    const resp = await apiPost('/reports/generate', { report_type: 'chain', target_id: chainId });
+    if (resp?.data?.report_id) {
+        showToast(`报告已生成: ${resp.data.report_no}`);
+        window.open(`/reports/${resp.data.report_id}`, '_blank');
+    } else {
+        showToast(resp?.message || '生成失败', 'error');
+    }
+}
+
+window.addEventListener('resize', () => {
+    const charts = document.querySelectorAll('#chainTimelineChart, #chainFlowChart');
+    charts.forEach(el => { const i = echarts.getInstanceByDom(el); if (i) i.resize(); });
+});
+
+loadChain();
+</script>
+{% endblock %}

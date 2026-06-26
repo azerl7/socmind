@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 日志中心{% endblock %}
+{% block page_title %}日志中心{% endblock %}
+
+{% block content %}
+<div class="card mb-3">
+    <div class="card-header">导入日志</div>
+    <div class="card-body">
+        <form id="importForm" class="row g-2 align-items-end">
+            <div class="col-auto">
+                <select class="form-select" id="logType" required>
+                    <option value="web">Web 访问日志</option>
+                    <option value="login">登录日志</option>
+                    <option value="waf">WAF 告警日志</option>
+                    <option value="host">主机安全日志</option>
+                    <option value="network">网络安全日志</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <input type="file" class="form-control" id="logFile" accept=".csv,.json,.txt,.log" required>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-upload"></i> 上传并解析</button>
+            </div>
+        </form>
+        <div id="importResult" class="mt-2"></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">日志检索</div>
+    <div class="card-body">
+        <div class="filter-bar">
+            <select class="form-select form-select-sm" id="filterLogType" onchange="loadLogs(1)">
+                <option value="">全部类型</option>
+                <option value="web">Web</option>
+                <option value="login">登录</option>
+                <option value="waf">WAF</option>
+                <option value="host">主机</option>
+                <option value="network">网络</option>
+            </select>
+            <input type="text" class="form-control form-control-sm" id="filterSrcIP" placeholder="源 IP">
+            <input type="text" class="form-control form-control-sm" id="filterKeyword" placeholder="关键词">
+            <button class="btn btn-sm btn-primary" onclick="loadLogs(1)"><i class="bi bi-search"></i> 搜索</button>
+            <button class="btn btn-sm btn-outline-info" onclick="exportLogs()"><i class="bi bi-download"></i> 导出 CSV</button>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="table table-hover">
+                <thead><tr>
+                    <th>ID</th><th>类型</th><th>时间</th><th>源 IP</th><th>方法</th>
+                    <th>URL</th><th>状态码</th><th>账号</th>
+                </tr></thead>
+                <tbody id="logTableBody"><tr><td colspan="8" class="text-center text-muted py-4">加载中...</td></tr></tbody>
+            </table>
+        </div>
+        <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted" id="logCountInfo"></small>
+            <div id="logPagination"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('importForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const file = document.getElementById('logFile').files[0];
+    if (!file) return showToast('请选择文件', 'warning');
+    const logType = document.getElementById('logType').value;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('log_type', logType);
+    document.getElementById('importResult').innerHTML = '<div class="loading"><div class="spinner"></div><p>导入解析中...</p></div>';
+    const resp = await apiUpload('/logs/import', formData);
+    if (resp.code === 0) {
+        const d = resp.data;
+        document.getElementById('importResult').innerHTML = `<div class="alert alert-success py-2 mb-0">导入成功: 共 ${d.total_count} 条, 成功 ${d.success_count} 条, 失败 ${d.failed_count} 条</div>`;
+        loadLogs(1);
+    } else {
+        document.getElementById('importResult').innerHTML = `<div class="alert alert-danger py-2 mb-0">导入失败: ${resp.message}</div>`;
+    }
+});
+
+async function loadLogs(page) {
+    const logType = document.getElementById('filterLogType').value;
+    const srcIp = document.getElementById('filterSrcIP').value;
+    const keyword = document.getElementById('filterKeyword').value;
+    const params = { page, page_size: 20 };
+    if (logType) params.log_type = logType;
+    if (srcIp) params.src_ip = srcIp;
+    if (keyword) params.keyword = keyword;
+
+    const resp = await apiGet('/logs', params);
+    const data = resp?.data || { items: [], total: 0 };
+    const tbody = document.getElementById('logTableBody');
+
+    if (data.items.length) {
+        tbody.innerHTML = data.items.map(l => `<tr>
+            <td><small>${l.id}</small></td>
+            <td><span class="badge bg-secondary">${l.log_type}</span></td>
+            <td><small>${fmtTime(l.event_time)}</small></td>
+            <td><code>${l.src_ip || '-'}</code></td>
+            <td>${l.http_method || '-'}</td>
+            <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.url || ''}">${l.url || '-'}</td>
+            <td>${l.status_code || '-'}</td>
+            <td>${l.username || '-'}</td>
+        </tr>`).join('');
+    } else {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">暂无日志数据</td></tr>';
+    }
+
+    document.getElementById('logCountInfo').textContent = `共 ${data.total} 条记录`;
+    renderPagination(document.getElementById('logPagination'), page, 20, data.total, loadLogs);
+}
+
+function exportLogs() {
+    const params = new URLSearchParams();
+    const t = document.getElementById('filterLogType').value;
+    const ip = document.getElementById('filterSrcIP').value;
+    const kw = document.getElementById('filterKeyword').value;
+    if (t) params.set('log_type', t);
+    if (ip) params.set('src_ip', ip);
+    if (kw) params.set('keyword', kw);
+    window.open(`/api/v1/export/logs/csv?${params.toString()}`, '_blank');
+}
+
+loadLogs(1);
+</script>
+{% endblock %}

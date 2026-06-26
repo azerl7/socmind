@@ -1,0 +1,456 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 系统管理{% endblock %}
+{% block page_title %}系统管理{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">AI 配置</div>
+            <div class="card-body">
+                <form id="aiConfigForm">
+                    <div class="mb-3">
+                        <label class="form-label">OpenAI API Key</label>
+                        <input type="password" class="form-control" id="cfg_openai_api_key" placeholder="sk-...">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">模型名称</label>
+                        <input type="text" class="form-control" id="cfg_openai_model" placeholder="gpt-4o-mini">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">API Base URL (可选)</label>
+                        <input type="text" class="form-control" id="cfg_openai_base_url" placeholder="https://api.openai.com">
+                    </div>
+                    <button type="submit" class="btn btn-primary">保存配置</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">检测阈值配置</div>
+            <div class="card-body">
+                <form id="thresholdConfigForm">
+                    <div class="mb-3">
+                        <label class="form-label">暴力破解阈值 (同 IP 失败次数)</label>
+                        <input type="number" class="form-control" id="cfg_brute_force_threshold" min="1" max="100">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">告警聚合时间窗口 (分钟)</label>
+                        <input type="number" class="form-control" id="cfg_alert_time_window" min="1" max="1440">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">高频访问阈值 (次/分钟)</label>
+                        <input type="number" class="form-control" id="cfg_high_freq_threshold" min="1" max="10000">
+                    </div>
+                    <button type="submit" class="btn btn-primary">保存配置</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">告警升级配置</div>
+            <div class="card-body">
+                <form id="escalationConfigForm">
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="cfg_escalation_enabled">
+                                <label class="form-check-label">启用自动升级</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div class="mb-2">
+                                <label class="form-label small">严重告警升级时限（小时）</label>
+                                <input type="number" class="form-control form-control-sm" id="cfg_escalation_critical_hours" min="0" max="72" value="1">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-2">
+                                <label class="form-label small">高危告警升级时限（小时）</label>
+                                <input type="number" class="form-control form-control-sm" id="cfg_escalation_high_hours" min="0" max="168" value="4">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-2">
+                                <label class="form-label small">中危告警升级时限（小时）</label>
+                                <input type="number" class="form-control form-control-sm" id="cfg_escalation_medium_hours" min="0" max="720" value="12">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-2">
+                                <label class="form-label small">最大升级次数</label>
+                                <input type="number" class="form-control form-control-sm" id="cfg_escalation_max_count" min="1" max="10" value="3">
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">保存升级配置</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">通知配置</div>
+            <div class="card-body">
+                <form id="notificationConfigForm">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="cfg_notification_enabled">
+                                <label class="form-check-label">启用告警通知</label>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">最低通知等级</label>
+                            <select class="form-select form-select-sm" id="cfg_notification_min_severity">
+                                <option value="low">低危及以上</option>
+                                <option value="medium" selected>中危及以上</option>
+                                <option value="high">高危及以上</option>
+                                <option value="critical">仅严重</option>
+                            </select>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6 class="mb-2">Webhook</h6>
+                    <div class="row g-2">
+                        <div class="col-md-8">
+                            <label class="form-label small">Webhook URL</label>
+                            <input type="url" class="form-control" id="cfg_webhook_url" placeholder="https://hooks.example.com/...">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">类型</label>
+                            <select class="form-select form-select-sm" id="cfg_webhook_type">
+                                <option value="generic">通用 JSON</option>
+                                <option value="wechat">企业微信</option>
+                                <option value="dingtalk">钉钉</option>
+                                <option value="feishu">飞书</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <button type="button" class="btn btn-sm btn-outline-info" onclick="testWebhook(this)">测试 Webhook</button>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6 class="mb-2">邮件 (SMTP)</h6>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label small">SMTP 服务器</label>
+                            <input type="text" class="form-control" id="cfg_smtp_host" placeholder="smtp.example.com">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">端口</label>
+                            <input type="number" class="form-control" id="cfg_smtp_port" placeholder="587">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">接收邮箱</label>
+                            <input type="email" class="form-control" id="cfg_notification_email_to" placeholder="soc@example.com">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">用户名</label>
+                            <input type="text" class="form-control" id="cfg_smtp_username" placeholder="user@example.com">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">密码</label>
+                            <input type="password" class="form-control" id="cfg_smtp_password">
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <button type="submit" class="btn btn-primary">保存通知配置</button>
+                        <button type="button" class="btn btn-sm btn-outline-info ms-1" onclick="testWebhook(this)">测试</button>
+                    </div>
+                </form>
+                <div id="testResult" class="mt-2"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">演示数据</div>
+            <div class="card-body">
+                <p class="text-muted">一键导入演示日志数据并自动执行规则检测，快速体验完整系统流程。</p>
+                <button class="btn btn-success w-100" onclick="importDemo()" id="demoBtn">
+                    <i class="bi bi-rocket-takeoff"></i> 一键导入演示数据
+                </button>
+                <div id="demoResult" class="mt-3"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>定时报告</span>
+                <button class="btn btn-sm btn-outline-primary" onclick="refreshScheduler()">刷新状态</button>
+            </div>
+            <div class="card-body" id="schedulerStatus">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="spinner" style="width:16px;height:16px;margin:0;"></div>
+                    <span>加载中...</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>告警抑制规则</span>
+                <button class="btn btn-sm btn-outline-success" onclick="showAddSuppression()"><i class="bi bi-plus"></i> 添加</button>
+            </div>
+            <div class="card-body" id="suppressionList">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="spinner" style="width:16px;height:16px;margin:0;"></div>
+                    <span>加载中...</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">系统健康检查</div>
+            <div class="card-body" id="healthStatus">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <div class="spinner" style="width:16px;height:16px;margin:0;"></div>
+                    <span>检查中...</span>
+                </div>
+            </div>
+            <div class="card-footer">
+                <button class="btn btn-sm btn-outline-secondary" onclick="checkHealth()">刷新状态</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CONFIG_KEYS = {
+    openai_api_key: 'cfg_openai_api_key',
+    openai_model: 'cfg_openai_model',
+    openai_base_url: 'cfg_openai_base_url',
+    brute_force_threshold: 'cfg_brute_force_threshold',
+    alert_time_window_minutes: 'cfg_alert_time_window',
+    high_freq_threshold: 'cfg_high_freq_threshold',
+    notification_enabled: 'cfg_notification_enabled',
+    notification_min_severity: 'cfg_notification_min_severity',
+    webhook_url: 'cfg_webhook_url',
+    webhook_type: 'cfg_webhook_type',
+    smtp_host: 'cfg_smtp_host',
+    smtp_port: 'cfg_smtp_port',
+    smtp_username: 'cfg_smtp_username',
+    smtp_password: 'cfg_smtp_password',
+    notification_email_to: 'cfg_notification_email_to',
+    escalation_enabled: 'cfg_escalation_enabled',
+    escalation_critical_hours: 'cfg_escalation_critical_hours',
+    escalation_high_hours: 'cfg_escalation_high_hours',
+    escalation_medium_hours: 'cfg_escalation_medium_hours',
+    escalation_max_count: 'cfg_escalation_max_count',
+};
+
+async function loadConfigs() {
+    const resp = await apiGet('/configs');
+    const items = resp?.data || [];
+    items.forEach(c => {
+        const elId = CONFIG_KEYS[c.config_key];
+        if (!elId) return;
+        const el = document.getElementById(elId);
+        if (!el) return;
+        if (el.type === 'checkbox') {
+            el.checked = c.config_value === 'true';
+        } else {
+            el.value = c.config_value || '';
+        }
+    });
+}
+
+async function saveConfig(key, value) {
+    return apiPut(`/configs/${key}`, { config_value: value });
+}
+
+document.getElementById('aiConfigForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await Promise.all([
+        saveConfig('openai_api_key', document.getElementById('cfg_openai_api_key').value),
+        saveConfig('openai_model', document.getElementById('cfg_openai_model').value),
+        saveConfig('openai_base_url', document.getElementById('cfg_openai_base_url').value),
+    ]);
+    showToast('AI 配置已保存');
+});
+
+document.getElementById('thresholdConfigForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await Promise.all([
+        saveConfig('brute_force_threshold', document.getElementById('cfg_brute_force_threshold').value),
+        saveConfig('alert_time_window_minutes', document.getElementById('cfg_alert_time_window').value),
+        saveConfig('high_freq_threshold', document.getElementById('cfg_high_freq_threshold').value),
+    ]);
+    showToast('阈值配置已保存');
+});
+
+document.getElementById('escalationConfigForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await Promise.all([
+        saveConfig('escalation_enabled', document.getElementById('cfg_escalation_enabled').checked ? 'true' : 'false'),
+        saveConfig('escalation_critical_hours', document.getElementById('cfg_escalation_critical_hours').value),
+        saveConfig('escalation_high_hours', document.getElementById('cfg_escalation_high_hours').value),
+        saveConfig('escalation_medium_hours', document.getElementById('cfg_escalation_medium_hours').value),
+        saveConfig('escalation_max_count', document.getElementById('cfg_escalation_max_count').value),
+    ]);
+    showToast('升级配置已保存');
+});
+
+async function importDemo() {
+    const btn = document.getElementById('demoBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;margin:0 auto;"></div> 导入中...';
+    document.getElementById('demoResult').innerHTML = '';
+
+    const resp = await apiPost('/system/demo/import');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-rocket-takeoff"></i> 一键导入演示数据';
+
+    const d = resp?.data;
+    if (resp.code === 0 && d) {
+        let html = '<div class="alert alert-success py-2">导入完成</div><table class="table table-sm"><thead><tr><th>类型</th><th>状态</th></tr></thead><tbody>';
+        (d.imports || []).forEach(item => {
+            html += `<tr><td>${item.type}</td><td>${item.status}${item.count ? ` (${item.count}条)` : ''}${item.chain_id ? ` (ID:${item.chain_id})` : ''}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        if (d.total_alerts > 0) html += `<div class="alert alert-info py-2">共生成 ${d.total_alerts} 条告警，可前往告警中心查看</div>`;
+        document.getElementById('demoResult').innerHTML = html;
+        showToast(d.message || '导入成功');
+    } else {
+        document.getElementById('demoResult').innerHTML = `<div class="alert alert-danger py-2">${resp?.message || '导入失败，请确认已生成演示日志文件'}</div>`;
+        showToast(resp?.message || '导入失败', 'error');
+    }
+}
+
+// 通知表单 - checkbox 特殊处理
+document.getElementById('notificationConfigForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const checks = { notification_enabled: document.getElementById('cfg_notification_enabled').checked ? 'true' : 'false' };
+    const promises = Object.entries(CONFIG_KEYS).map(([key, elId]) => {
+        if (key === 'notification_enabled') return saveConfig(key, checks.notification_enabled);
+        const el = document.getElementById(elId);
+        if (el) return saveConfig(key, el.value);
+        return Promise.resolve();
+    });
+    await Promise.all(promises);
+    showToast('通知配置已保存');
+});
+
+async function testWebhook(btn) {
+    if (!btn) btn = event && event.target;
+    if (!btn) return;
+    btn.disabled = true;
+    document.getElementById('testResult').innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0 auto;"></div> 发送测试...';
+    const channel = document.getElementById('cfg_webhook_url').value ? 'webhook' : 'email';
+    const resp = await apiPost('/notifications/test', { channel });
+    btn.disabled = false;
+    if (resp.code === 0) {
+        document.getElementById('testResult').innerHTML = `<div class="alert alert-success py-1 mb-0">${resp.data.message}</div>`;
+    } else {
+        document.getElementById('testResult').innerHTML = `<div class="alert alert-warning py-1 mb-0">${resp.message}</div>`;
+    }
+}
+
+// Load checkbox
+function loadConfigsWithCheckbox() {
+    const enabled = document.getElementById('cfg_notification_enabled');
+    if (enabled) {
+        const val = document.querySelector('#cfg_notification_enabled').dataset.value;
+        if (val === 'true') enabled.checked = true;
+    }
+}
+
+async function checkHealth() {
+    document.getElementById('healthStatus').innerHTML = '<div class="d-flex align-items-center gap-2"><div class="spinner" style="width:16px;height:16px;margin:0;"></div><span>检查中...</span></div>';
+    const resp = await apiGet('/system/health');
+    const h = resp?.data || {};
+    const checks = h.checks || {};
+    const isHealthy = h.status === 'healthy';
+    document.getElementById('healthStatus').innerHTML = `
+        <div class="d-flex align-items-center gap-2 mb-2">
+            <span style="color:${isHealthy ? '#27ae60' : '#e74c3c'};font-size:20px;">${isHealthy ? '✓' : '✗'}</span>
+            <span><strong>系统状态:</strong> ${isHealthy ? '运行正常' : '部分异常'}</span>
+        </div>
+        ${Object.entries(checks).map(([k, v]) =>
+            `<div><small class="text-muted">${k}: ${v}</small></div>`
+        ).join('')}
+    `;
+}
+
+async function refreshScheduler() {
+    const el = document.getElementById('schedulerStatus');
+    el.innerHTML = '<div class="d-flex align-items-center gap-2"><div class="spinner" style="width:16px;height:16px;margin:0;"></div><span>加载中...</span></div>';
+    const resp = await apiGet('/scheduler/status');
+    const s = resp?.data || {};
+    if (!s.running) {
+        el.innerHTML = '<div class="text-muted"><i class="bi bi-info-circle"></i> 调度器未运行</div>';
+        return;
+    }
+    let html = `<div class="small"><span class="badge bg-success">运行中</span> 共 ${s.jobs.length} 个任务</div>`;
+    if (s.jobs.length) {
+        html += '<table class="table table-sm mt-2"><thead><tr><th>任务</th><th>下次执行</th><th>触发器</th></tr></thead><tbody>';
+        s.jobs.forEach(j => {
+            html += `<tr><td>${j.name}</td><td><small>${j.next_run || '-'}</small></td><td><small>${j.trigger}</small></td></tr>`;
+        });
+        html += '</tbody></table>';
+    }
+    el.innerHTML = html;
+}
+
+async function loadSuppressions() {
+    const el = document.getElementById('suppressionList');
+    const resp = await apiGet('/suppressions', { page: 1, page_size: 50 });
+    const data = resp?.data || { items: [], total: 0 };
+    if (!data.items.length) {
+        el.innerHTML = '<div class="text-muted small">暂无抑制规则。添加规则可过滤误报告警。</div>';
+        return;
+    }
+    let html = '<div class="small">';
+    data.items.forEach(r => {
+        const statusCls = r.is_active ? 'success' : 'secondary';
+        const mtMap = { ip: 'IP', attack_type: '攻击类型', severity: '等级', rule_code: '规则', combination: '组合' };
+        html += `<div class="d-flex justify-content-between align-items-center mb-1 p-1 border-bottom">
+            <div><strong>${r.rule_name}</strong> <span class="badge bg-info">${mtMap[r.match_type]||r.match_type}</span> <code>${r.match_value}</code>
+            <small class="text-muted ms-2">${r.reason||''} 命中${r.hit_count||0}次</small></div>
+            <div>
+                <span class="badge bg-${statusCls}">${r.is_active ? '启用' : '禁用'}</span>
+                <button class="btn btn-sm btn-outline-${r.is_active ? 'warning' : 'success'} py-0 px-1" onclick="toggleSuppression(${r.id})"><small>切换</small></button>
+                <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="deleteSuppression(${r.id})"><small>删除</small></button>
+            </div>
+        </div>`;
+    });
+    html += '</div>';
+    el.innerHTML = html;
+}
+
+function showAddSuppression() {
+    const name = prompt('规则名称：');
+    if (!name) return;
+    const type = prompt('匹配类型 (ip/attack_type/severity/rule_code/combination)：', 'ip');
+    if (!type) return;
+    const value = prompt('匹配值：');
+    if (!value) return;
+    const reason = prompt('抑制理由（可选）：') || '';
+    const hours = prompt('过期小时数（留空=永久）：') || '';
+    apiPost('/suppressions', { rule_name: name, match_type: type, match_value: value, reason, expires_in_hours: hours ? parseInt(hours) : null })
+        .then(r => { showToast(r.code === 0 ? '规则已添加' : r.message || '添加失败', r.code === 0 ? 'success' : 'error'); loadSuppressions(); });
+}
+
+async function toggleSuppression(id) {
+    await apiPost(`/suppressions/${id}/toggle`);
+    loadSuppressions();
+}
+
+async function deleteSuppression(id) {
+    if (!confirm('确认删除此抑制规则？')) return;
+    await apiDelete(`/suppressions/${id}`);
+    showToast('规则已删除');
+    loadSuppressions();
+}
+
+loadConfigs();
+checkHealth();
+refreshScheduler();
+loadSuppressions();
+</script>
+{% endblock %}

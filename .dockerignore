@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+
+# Git
+.git/
+.gitignore
+
+# Database
+instance/
+mysql_data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests (not needed in production image)
+.pytest_cache/
+tests/
+
+# Source data (generated at runtime)
+uploads/*
+!uploads/.gitkeep
+demo_data/*
+!demo_data/.gitkeep
+
+# Node (if any)
+node_modules/

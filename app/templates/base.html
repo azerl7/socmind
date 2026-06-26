@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}SOCMind{% endblock %} - AI 安全运营研判平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/socmind.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <!-- 侧边栏 -->
+    <div class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon">S</div>
+            <div>
+                <div class="brand-text">SOCMind</div>
+                <div class="brand-sub">安全运营研判平台</div>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-section">概览</div>
+            <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">
+                <i class="bi bi-speedometer2"></i><span>仪表盘</span>
+            </a>
+
+            <div class="nav-section">安全运营</div>
+            <a href="/alerts" class="nav-item {% if request.path.startswith('/alerts') and not request.path.startswith('/alerts/events') %}active{% endif %}">
+                <i class="bi bi-shield-exclamation"></i><span>告警中心</span>
+            </a>
+            <a href="/events" class="nav-item {% if request.path.startswith('/alerts/events') or request.path.startswith('/events') %}active{% endif %}">
+                <i class="bi bi-diagram-2"></i><span>安全事件</span>
+            </a>
+            <a href="/logs" class="nav-item {% if request.path.startswith('/logs') %}active{% endif %}">
+                <i class="bi bi-journal-text"></i><span>日志中心</span>
+            </a>
+            <a href="/chains" class="nav-item {% if request.path.startswith('/chains') %}active{% endif %}">
+                <i class="bi bi-diagram-3"></i><span>攻击链</span>
+            </a>
+            <a href="/reports" class="nav-item {% if request.path.startswith('/reports') %}active{% endif %}">
+                <i class="bi bi-file-earmark-text"></i><span>报告中心</span>
+            </a>
+            <a href="/assets" class="nav-item {% if request.path.startswith('/assets') %}active{% endif %}">
+                <i class="bi bi-hdd-network"></i><span>资产管理</span>
+            </a>
+
+            <div class="nav-section">知识库</div>
+            <a href="/knowledge" class="nav-item {% if request.path.startswith('/knowledge') %}active{% endif %}">
+                <i class="bi bi-book"></i><span>安全知识库</span>
+            </a>
+
+            <div class="nav-section">文档</div>
+            <a href="/help" class="nav-item {% if request.path.startswith('/help') %}active{% endif %}">
+                <i class="bi bi-question-circle"></i><span>使用指南</span>
+            </a>
+            <a href="/api-docs" class="nav-item {% if request.path.startswith('/api-docs') %}active{% endif %}">
+                <i class="bi bi-file-code"></i><span>API 文档</span>
+            </a>
+
+            <div class="nav-section">系统管理</div>
+            <a href="/rules" class="nav-item {% if request.path.startswith('/rules') %}active{% endif %}">
+                <i class="bi bi-sliders"></i><span>规则管理</span>
+            </a>
+            <a href="/configs" class="nav-item {% if request.path.startswith('/configs') %}active{% endif %}">
+                <i class="bi bi-gear"></i><span>系统配置</span>
+            </a>
+            <a href="/audit-logs" class="nav-item {% if request.path.startswith('/audit-logs') %}active{% endif %}">
+                <i class="bi bi-journal-check"></i><span>审计日志</span>
+            </a>
+            <a href="/users" class="nav-item {% if request.path.startswith('/users') and not request.path.startswith('/login-logs') and not request.path.startswith('/profile') %}active{% endif %}">
+                <i class="bi bi-people"></i><span>用户管理</span>
+            </a>
+            <a href="/login-logs" class="nav-item {% if request.path.startswith('/login-logs') %}active{% endif %}">
+                <i class="bi bi-shield-lock"></i><span>登录日志</span>
+            </a>
+        </nav>
+    </div>
+
+    <!-- 顶部栏 -->
+    <header class="topbar">
+        <div class="topbar-left" style="flex:1;">
+            <span class="page-title">{% block page_title %}SOCMind{% endblock %}</span>
+            <div class="search-box" style="position:relative;flex:1;max-width:400px;margin-left:20px;">
+                <input type="text" id="globalSearch" class="form-control form-control-sm" placeholder="搜索告警、日志、资产..." style="padding-left:30px;font-size:13px;" onkeydown="if(event.key==='Enter')doGlobalSearch()">
+                <i class="bi bi-search" style="position:absolute;left:10px;top:7px;font-size:13px;color:#999;"></i>
+                <div id="searchResults" class="dropdown-menu" style="width:100%;max-height:400px;overflow-y:auto;display:none;"></div>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <span class="topbar-user">
+                <span class="topbar-avatar">{{ (current_user.nickname or current_user.username or 'U')[:1] }}</span>
+                <span>{{ current_user.nickname or current_user.username or '用户' }}</span>
+                <a href="/profile" class="ms-2 text-muted" title="个人设置"><i class="bi bi-gear"></i></a>
+            </span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="toggleTheme()" id="themeBtn" title="切换主题"><i class="bi bi-moon-fill"></i></button>
+            <a href="/api/v1/auth/logout" class="btn btn-outline-secondary btn-sm">退出</a>
+        </div>
+    </header>
+
+    <!-- 主内容 -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Toast 容器 -->
+    <div id="toastContainer" style="position:fixed;top:70px;right:20px;z-index:9999;"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script src="{{ url_for('static', filename='js/socmind.js') }}"></script>
+    <script>
+    // 全局搜索
+    let searchTimeout = null;
+    function doGlobalSearch() {
+        const q = document.getElementById('globalSearch').value.trim();
+        if (!q) { document.getElementById('searchResults').style.display = 'none'; return; }
+        fetch(`/api/v1/search?q=${encodeURIComponent(q)}`)
+            .then(r => r.json())
+            .then(resp => {
+                const data = resp?.data || {};
+                const el = document.getElementById('searchResults');
+                let html = '';
+                ['alerts', 'logs', 'assets', 'chains'].forEach(type => {
+                    const items = data[type]?.items || [];
+                    const total = data[type]?.total || 0;
+                    if (!items.length) return;
+                    const labels = { alerts: '告警', logs: '日志', assets: '资产', chains: '攻击链' };
+                    html += `<h6 class="dropdown-header">${labels[type]} (${total})</h6>`;
+                    items.slice(0, 5).forEach(item => {
+                        if (type === 'alerts') html += `<a class="dropdown-item" href="/alerts/${item.id}" style="font-size:13px;">[${item.severity}] ${item.title}</a>`;
+                        else if (type === 'logs') html += `<a class="dropdown-item" href="/logs" style="font-size:13px;">[${item.log_type}] ${item.src_ip || ''} ${item.url || ''}</a>`;
+                        else if (type === 'assets') html += `<a class="dropdown-item" href="/assets/${item.id}" style="font-size:13px;">${item.asset_ip} (${item.asset_type})</a>`;
+                        else if (type === 'chains') html += `<a class="dropdown-item" href="/chains/${item.id}" style="font-size:13px;">${item.title}</a>`;
+                    });
+                });
+                el.innerHTML = html || '<div class="dropdown-item text-muted">未找到匹配结果</div>';
+                el.style.display = 'block';
+            });
+    }
+    // 点击外部关闭搜索
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.search-box')) {
+            document.getElementById('searchResults').style.display = 'none';
+        }
+    });
+
+    // 主题切换
+    (function() {
+        const saved = localStorage.getItem('socmind_theme');
+        if (saved === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            const btn = document.getElementById('themeBtn');
+            if (btn) btn.innerHTML = '<i class="bi bi-sun-fill"></i>';
+        }
+    })();
+
+    function toggleTheme() {
+        const html = document.documentElement;
+        const current = html.getAttribute('data-theme');
+        const btn = document.getElementById('themeBtn');
+        if (current === 'dark') {
+            html.removeAttribute('data-theme');
+            localStorage.setItem('socmind_theme', 'light');
+            if (btn) btn.innerHTML = '<i class="bi bi-moon-fill"></i>';
+        } else {
+            html.setAttribute('data-theme', 'dark');
+            localStorage.setItem('socmind_theme', 'dark');
+            if (btn) btn.innerHTML = '<i class="bi bi-sun-fill"></i>';
+        }
+    }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

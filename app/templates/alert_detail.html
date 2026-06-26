@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 告警详情{% endblock %}
+{% block page_title %}告警详情{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header"><span id="alertTitle">告警详情</span>
+                <div>
+                    <button class="btn btn-sm btn-primary" onclick="runAI()"><i class="bi bi-robot"></i> AI研判</button>
+                    <div class="btn-group btn-group-sm ms-1">
+                        <button class="btn btn-outline-success" onclick="updateStatus('confirmed')">确认</button>
+                        <button class="btn btn-outline-warning" onclick="updateStatus('false_positive')">误报</button>
+                        <button class="btn btn-outline-secondary" onclick="updateStatus('closed')">关闭</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="loading" id="alertLoading"><div class="spinner"></div><p>加载中...</p></div>
+                <div id="alertContent" style="display:none;">
+                    <table class="table table-bordered" id="alertInfoTable"></table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">告警上下文时间线</div>
+            <div class="card-body"><div id="contextTimeline" style="height:180px;"></div></div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">规则信息</div>
+            <div class="card-body"><div id="ruleInfo" class="p-3 bg-light rounded">加载中...</div></div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">AI 研判结果
+                <button class="btn btn-sm btn-outline-primary" id="btnReviseAI" style="display:none;" onclick="toggleEditAI()"><i class="bi bi-pencil"></i> 修订</button>
+            </div>
+            <div class="card-body">
+                <div id="aiResult"><p class="text-muted mb-0">点击「AI研判」按钮进行分析</p></div>
+                <div id="aiEditPanel" style="display:none;" class="mt-2">
+                    <hr>
+                    <div class="mb-2"><label class="form-label">摘要</label><textarea class="form-control form-control-sm" id="editSummary" rows="2"></textarea></div>
+                    <div class="mb-2"><label class="form-label">风险等级</label>
+                        <select class="form-select form-select-sm" id="editRiskLevel">
+                            <option value="low">低</option>
+                            <option value="medium">中</option>
+                            <option value="high">高</option>
+                            <option value="critical">严重</option>
+                        </select>
+                    </div>
+                    <div class="mb-2"><label class="form-label">处置建议</label><textarea class="form-control form-control-sm" id="editSuggestion" rows="2"></textarea></div>
+                    <div class="mb-2"><label class="form-label">修订说明</label><input class="form-control form-control-sm" id="editComment" placeholder="简要说明修订原因"></div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-primary" onclick="saveRevision()">保存修订</button>
+                        <button class="btn btn-sm btn-secondary" onclick="toggleEditAI()">取消</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">原始日志</div>
+            <div class="card-body"><pre id="rawLogContent" class="mb-0" style="font-size:13px;max-height:200px;overflow-y:auto;">加载中...</pre></div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">证据列表</div>
+            <div class="card-body" id="evidenceList"><p class="text-muted">加载中...</p></div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">处置建议</div>
+            <div class="card-body" id="suggestionBox"><p class="text-muted">AI 研判后可生成建议</p></div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">分析笔记</div>
+            <div class="card-body">
+                <div id="commentList" class="mb-2"><p class="text-muted">暂无笔记</p></div>
+                <div class="input-group">
+                    <textarea class="form-control form-control-sm" id="commentInput" rows="2" placeholder="添加分析笔记..." style="font-size:13px;"></textarea>
+                    <button class="btn btn-sm btn-primary" onclick="addComment()">提交</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const alertId = {{ alert_id }};
+let alertData = null;
+
+async function loadAlertDetail() {
+    const resp = await apiGet(`/alerts/${alertId}`);
+    const a = resp?.data;
+    if (!a) { document.getElementById('alertLoading').innerHTML = '<p class="text-danger">告警不存在</p>'; return; }
+
+    alertData = a;
+    document.getElementById('alertLoading').style.display = 'none';
+    document.getElementById('alertContent').style.display = 'block';
+    document.getElementById('alertTitle').textContent = `告警: ${a.title || alertId}`;
+
+    document.getElementById('alertInfoTable').innerHTML = `
+        <tr><th style="width:100px;">编号</th><td>${a.alert_no || '-'}</td></tr>
+        <tr><th>标题</th><td><strong>${a.title}</strong></td></tr>
+        <tr><th>攻击类型</th><td>${a.attack_type}</td></tr>
+        <tr><th>等级</th><td>${severityBadge(a.severity)} <strong class="ms-2">${a.risk_score}</strong>/100</td></tr>
+        <tr><th>源 IP</th><td><code>${a.src_ip || '-'}</code></td></tr>
+        <tr><th>目标</th><td><code>${a.dst_ip || '-'}</code></td></tr>
+        <tr><th>账号</th><td>${a.username || '-'}</td></tr>
+        <tr><th>状态</th><td>${statusBadge(a.status)}</td></tr>
+        <tr><th>时间</th><td>${fmtTime(a.event_time)}</td></tr>
+    `;
+
+    // 上下文时间线
+    loadContextTimeline(a);
+
+    // 规则信息
+    if (a.rule) {
+        document.getElementById('ruleInfo').innerHTML = `
+            <div><strong>${a.rule.rule_code}</strong> - ${a.rule.rule_name}</div>
+            <div class="text-muted">${a.rule.description || ''}</div>
+            ${a.rule.rule_pattern ? `<div class="mt-1"><code style="font-size:12px;">${a.rule.rule_pattern}</code></div>` : ''}
+        `;
+    }
+
+    // 原始日志
+    if (a.raw_log) {
+        document.getElementById('rawLogContent').textContent = a.raw_log.raw_content || '(无原始日志)';
+    }
+
+    // 证据
+    const ev = a.evidences || [];
+    const evList = document.getElementById('evidenceList');
+    if (ev.length) {
+        evList.innerHTML = ev.map(e => `<div class="mb-2 p-2 bg-light rounded">
+            <small class="text-muted">${e.evidence_type}</small>
+            <div style="font-size:13px;">${e.content}</div>
+        </div>`).join('');
+    } else {
+        evList.innerHTML = '<p class="text-muted">暂无证据</p>';
+    }
+}
+
+async function loadContextTimeline(a) {
+    // 查询告警前后各 10 条同源日志
+    const srcIp = a.src_ip;
+    const eventTime = a.event_time;
+    if (!srcIp || !eventTime) {
+        document.getElementById('contextTimeline').innerHTML = '<p class="text-muted text-center pt-5">无上下文数据</p>';
+        return;
+    }
+
+    const dt = new Date(eventTime);
+    const start = new Date(dt.getTime() - 30 * 60000).toISOString().slice(0, 19).replace('T', ' ');
+    const end = new Date(dt.getTime() + 30 * 60000).toISOString().slice(0, 19).replace('T', ' ');
+
+    const resp = await apiGet('/logs', { src_ip: srcIp, start_time: start, end_time: end, page_size: 50 });
+    const logs = resp?.data?.items || [];
+    if (!logs.length) {
+        document.getElementById('contextTimeline').innerHTML = '<p class="text-muted text-center pt-5">该时间窗口无其他日志</p>';
+        return;
+    }
+
+    // 用时间线图展示
+    const chart = echarts.init(document.getElementById('contextTimeline'));
+    const alertTime = new Date(eventTime).getTime();
+
+    const data = logs.map(l => ({
+        name: l.log_type,
+        value: [new Date(l.event_time).getTime(), l.log_type],
+        itemStyle: {
+            color: l.log_type === 'waf' ? '#e74c3c' : l.log_type === 'login' ? '#f39c12' : '#3a7bf7',
+        },
+        log_type: l.log_type,
+        url: l.url || l.action || '',
+        status: l.status_code || '',
+    }));
+
+    // 标记告警时刻
+    chart.setOption({
+        tooltip: {
+            formatter: (p) => {
+                if (p.seriesIndex === 1) return `<strong>⚠ 当前告警</strong><br>${fmtTime(eventTime)}`;
+                const d = p.data;
+                return `<strong>${d.log_type}</strong><br>时间: ${new Date(d.value[0]).toLocaleString()}<br>${d.url || ''}`;
+            },
+        },
+        grid: { left: 60, right: 20, top: 10, bottom: 20 },
+        xAxis: { type: 'time', axisLabel: { fontSize: 11 } },
+        yAxis: {
+            type: 'category',
+            data: [...new Set(data.map(d => d.name))],
+            axisLabel: { fontSize: 11 },
+        },
+        series: [
+            {
+                name: '上下文日志',
+                type: 'scatter',
+                data: data,
+                symbolSize: 10,
+            },
+            {
+                name: '当前告警',
+                type: 'scatter',
+                data: [{ value: [alertTime, data[0]?.name || 'web'], symbolSize: 20 }],
+                symbol: 'pin',
+                symbolSize: 20,
+                itemStyle: { color: '#e74c3c' },
+                label: { show: true, formatter: '⚠ 告警', position: 'right', fontSize: 11, fontWeight: 'bold', color: '#e74c3c' },
+            },
+        ],
+    });
+}
+
+async function updateStatus(status) {
+    const resp = await apiPatch(`/alerts/${alertId}/status`, { status });
+    if (resp.code === 0) { showToast('状态已更新'); loadAlertDetail(); }
+    else showToast(resp.message, 'error');
+}
+
+async function runAI() {
+    document.getElementById('aiResult').innerHTML = '<div class="loading"><div class="spinner"></div><p>AI 研判中...</p></div>';
+    document.getElementById('suggestionBox').innerHTML = '<p class="text-muted">生成中...</p>';
+    const resp = await apiPost(`/ai/analyze/alert/${alertId}`, { use_rag: true, include_context: true });
+    const r = resp?.data || {};
+
+    const html = `
+        <div class="mb-2"><strong>摘要:</strong> ${r.summary || '-'}</div>
+        <div class="mb-2"><strong>风险等级:</strong> ${severityBadge(r.risk_level)}</div>
+        <div class="mb-2"><strong>攻击阶段:</strong> ${r.attack_stage || '-'}</div>
+        <div class="mb-2"><strong>误报可能性:</strong> ${r.false_positive_possibility || '-'}</div>
+        <hr>
+        <div class="mb-2"><strong>管理摘要:</strong> ${r.management_summary || '-'}</div>
+        ${r.technical_steps ? '<div><strong>处置步骤:</strong><ol>' + r.technical_steps.map(s => `<li>${s}</li>`).join('') + '</ol></div>' : ''}
+        ${r._fallback ? '<div class="alert alert-warning mt-2 py-2 mb-0"><small>⚠ 降级研判 - AI API 未配置</small></div>' : ''}`;
+
+    document.getElementById('aiResult').innerHTML = html;
+    document.getElementById('suggestionBox').innerHTML = `<p>${r.suggestion || 'AI 研判后可生成建议'}</p>`;
+
+    // 如果 analysis_id 存在且非降级，显示修订按钮
+    if (r.analysis_id && !r._fallback) {
+        document.getElementById('btnReviseAI').style.display = '';
+        document.getElementById('btnReviseAI').dataset.analysisId = r.analysis_id;
+    }
+}
+
+// AI-08: 人工修订功能
+let currentAnalysisId = null;
+
+function toggleEditAI() {
+    const panel = document.getElementById('aiEditPanel');
+    if (panel.style.display !== 'none') {
+        panel.style.display = 'none';
+        return;
+    }
+    const analysisId = document.getElementById('btnReviseAI').dataset.analysisId;
+    if (!analysisId) { showToast('无 AI 研判结果可修订', 'warning'); return; }
+
+    currentAnalysisId = analysisId;
+    panel.style.display = 'block';
+}
+
+async function saveRevision() {
+    if (!currentAnalysisId) return;
+    const data = {
+        summary: document.getElementById('editSummary').value,
+        risk_level: document.getElementById('editRiskLevel').value,
+        suggestion: document.getElementById('editSuggestion').value,
+        revision_comment: document.getElementById('editComment').value || '人工修订',
+    };
+    const resp = await apiPut(`/ai/analyses/${currentAnalysisId}/revise`, data);
+    if (resp.code === 0) {
+        showToast('修订已保存');
+        document.getElementById('aiEditPanel').style.display = 'none';
+        // 刷新显示
+        const r = resp.data;
+        document.getElementById('aiResult').innerHTML = `
+            <div class="mb-2"><strong>摘要:</strong> ${r.summary || '-'}</div>
+            <div class="mb-2"><strong>风险等级:</strong> ${severityBadge(r.risk_level)}</div>
+            <div class="mb-2"><strong>处置建议:</strong> ${r.suggestion || '-'}</div>
+            ${r.revision_comment ? `<div class="alert alert-info py-1 mb-0"><small>🖊 已修订: ${r.revision_comment} (${r.revised_by_name || ''} ${fmtTime(r.revised_at)})</small></div>` : ''}`;
+    } else {
+        showToast(resp.message, 'error');
+    }
+}
+
+async function loadComments() {
+    const resp = await apiGet(`/comments/${alertId}`);
+    const items = resp?.data?.items || [];
+    const el = document.getElementById('commentList');
+    if (!items.length) {
+        el.innerHTML = '<p class="text-muted">暂无笔记</p>';
+        return;
+    }
+    el.innerHTML = items.map(c => `<div class="mb-2 p-2 bg-light rounded">
+        <div class="d-flex justify-content-between">
+            <small><strong>${c.username}</strong> <span class="text-muted">${fmtTime(c.created_at)}</span></small>
+            ${c.comment_type === 'status_change' ? `<span class="badge bg-info">状态变更 ${c.old_status}→${c.new_status}</span>` : ''}
+        </div>
+        <div style="font-size:13px;white-space:pre-wrap;">${c.content}</div>
+    </div>`).join('');
+}
+
+async function addComment() {
+    const input = document.getElementById('commentInput');
+    const content = input.value.trim();
+    if (!content) return showToast('请输入内容', 'warning');
+    const resp = await apiPost(`/comments/${alertId}`, { content });
+    if (resp.code === 0) {
+        input.value = '';
+        loadComments();
+        showToast('笔记已添加');
+    } else {
+        showToast(resp.message || '添加失败', 'error');
+    }
+}
+
+// 在状态变更时自动添加系统笔记
+const origUpdateStatus = updateStatus;
+updateStatus = async function(status) {
+    const resp = await apiPatch(`/alerts/${alertId}/status`, { status });
+    if (resp.code === 0) {
+        const statusLabels = { confirmed: '已确认', false_positive: '误报', closed: '已关闭', in_progress: '处理中' };
+        await apiPost(`/comments/${alertId}`, {
+            content: `状态变更为: ${statusLabels[status] || status}`,
+            comment_type: 'status_change',
+        });
+        showToast('状态已更新');
+        loadAlertDetail();
+        loadComments();
+    } else showToast(resp.message, 'error');
+};
+
+loadAlertDetail();
+loadComments();
+</script>
+{% endblock %}

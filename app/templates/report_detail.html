@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 报告详情{% endblock %}
+{% block page_title %}报告详情{% endblock %}
+
+{% block head %}
+<style>
+@media print {
+    .sidebar, .topbar, .main-content > *:not(.report-print-area) { display: none !important; }
+    .main-content { margin: 0 !important; padding: 0 !important; }
+    .report-print-area { margin: 0; padding: 20px; }
+    .no-print { display: none !important; }
+}
+.report-header { border-bottom: 3px solid #e74c3c; padding-bottom: 15px; margin-bottom: 20px; }
+.report-header h1 { color: #c0392b; margin: 0; font-size: 24px; }
+.report-header .meta { color: #888; font-size: 13px; margin-top: 8px; }
+.report-body { line-height: 1.8; font-size: 14px; }
+.report-body h1 { font-size: 22px; color: #c0392b; border-bottom: 2px solid #e74c3c; padding-bottom: 8px; margin-top: 24px; }
+.report-body h2 { font-size: 18px; margin-top: 24px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+.report-body h3 { font-size: 15px; margin-top: 16px; }
+.report-body table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+.report-body th, .report-body td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+.report-body th { background: #f5f5f5; font-weight: 600; }
+.report-body pre { background: #f5f5f5; padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 13px; }
+.report-body code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px; }
+.report-body hr { border: none; border-top: 1px solid #eee; margin: 20px 0; }
+.report-footer { margin-top: 30px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 12px; color: #888; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="report-print-area">
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+        <div></div>
+        <div class="btn-group">
+            <a href="/api/v1/reports/{{ report_id }}/print" target="_blank" class="btn btn-sm btn-danger"><i class="bi bi-filetype-pdf"></i> 下载 PDF</a>
+            <button class="btn btn-sm btn-outline-primary" onclick="showRawMD()"><i class="bi bi-file-text"></i> 查看 MD</button>
+            <button class="btn btn-sm btn-success" onclick="downloadHTML()"><i class="bi bi-download"></i> 下载 HTML</button>
+            <button class="btn btn-sm btn-primary" onclick="window.print()"><i class="bi bi-printer"></i> 打印</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="loading" id="reportLoading"><div class="spinner"></div><p>加载报告...</p></div>
+            <div id="reportBody" style="display:none;"></div>
+            <div id="rawMdPanel" style="display:none;">
+                <pre id="rawMdContent" style="font-size:13px;max-height:600px;overflow-y:auto;background:#f8f9fa;padding:16px;border-radius:4px;"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const reportId = {{ report_id }};
+let reportData = null;
+
+async function loadReport() {
+    const resp = await apiGet(`/reports/${reportId}`);
+    reportData = resp?.data;
+    if (!reportData) { document.getElementById('reportLoading').innerHTML = '<p class="text-danger">报告不存在</p>'; return; }
+
+    document.getElementById('reportLoading').style.display = 'none';
+    document.getElementById('reportBody').style.display = 'block';
+
+    const html = reportData.content_html || '';
+    const md = reportData.content_md || '';
+
+    if (html) {
+        // 包装成结构化报告
+        document.getElementById('reportBody').innerHTML = `
+            <div class="report-header">
+                <h1>${reportData.title || '安全报告'}</h1>
+                <div class="meta">
+                    编号: ${reportData.report_no || '-'} |
+                    类型: ${reportData.report_type || '-'} |
+                    生成时间: ${fmtTime(reportData.created_at)}
+                </div>
+            </div>
+            <div class="report-body">${html}</div>
+            <div class="report-footer">
+                <p>此报告由 SOCMind AI 安全运营研判平台自动生成</p>
+                <p>生成时间: ${new Date().toLocaleString('zh-CN', { hour12: false })}</p>
+            </div>
+        `;
+    } else if (md) {
+        // Markdown 转简单 HTML
+        let bodyHtml = md
+            .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+            .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+            .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/^- (.*$)/gm, '<li>$1</li>')
+            .replace(/\|(.+)\|/g, (m) => {
+                const cells = m.split('|').filter(c => c.trim()).map(c => c.trim());
+                return `<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`;
+            })
+            .replace(/\n\n/g, '</p><p>')
+            .replace(/\n/g, '<br>');
+
+        document.getElementById('reportBody').innerHTML = `
+            <div class="report-header">
+                <h1>${reportData.title || '安全报告'}</h1>
+                <div class="meta">编号: ${reportData.report_no || '-'} | 生成时间: ${fmtTime(reportData.created_at)}</div>
+            </div>
+            <div class="report-body"><p>${bodyHtml}</p></div>
+            <div class="report-footer">
+                <p>此报告由 SOCMind AI 安全运营研判平台自动生成</p>
+                <p>生成时间: ${new Date().toLocaleString('zh-CN', { hour12: false })}</p>
+            </div>
+        `;
+    } else {
+        document.getElementById('reportBody').innerHTML = '<p class="text-muted">报告内容为空</p>';
+    }
+
+    // 保存 MD 用于查看
+    document.getElementById('rawMdContent').textContent = md || '(无 Markdown 内容)';
+}
+
+function showRawMD() {
+    const panel = document.getElementById('rawMdPanel');
+    const body = document.getElementById('reportBody');
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        body.style.display = 'none';
+    } else {
+        panel.style.display = 'none';
+        body.style.display = 'block';
+    }
+}
+
+function downloadHTML() {
+    const html = document.getElementById('reportBody').innerHTML;
+    if (!html) return showToast('无可下载内容', 'warning');
+    const fullHtml = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${reportData?.title || 'Report'}</title>
+<style>
+body{font-family:'Segoe UI',Arial,sans-serif;max-width:900px;margin:0 auto;padding:40px;line-height:1.8;color:#333}
+h1{color:#c0392b;border-bottom:2px solid #e74c3c;padding-bottom:8px}
+h2{margin-top:24px;border-bottom:1px solid #ddd;padding-bottom:4px}
+table{border-collapse:collapse;width:100%;margin:12px 0}
+th,td{border:1px solid #ddd;padding:8px 12px;text-align:left}
+th{background:#f5f5f5}
+pre{background:#f5f5f5;padding:12px;border-radius:4px}
+.footer{margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:12px;color:#888}
+</style></head><body>${html}</body></html>`;
+
+    const blob = new Blob([fullHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `report-${reportData?.report_no || reportId}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('HTML 报告已下载');
+}
+
+loadReport();
+</script>
+{% endblock %}

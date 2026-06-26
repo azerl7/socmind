@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 使用指南{% endblock %}
+{% block page_title %}快速上手指南{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">系统概览</div>
+            <div class="card-body">
+                <p>SOCMind 是一个面向企业安全运营场景的 AI 安全告警研判与攻击链还原系统。</p>
+                <p>核心流程：<code>日志导入 → 规则检测 → 告警生成 → AI 研判 → 攻击链还原 → 报告输出</code></p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">快速入门（5 分钟体验完整流程）</div>
+            <div class="card-body">
+                <div class="d-flex mb-3">
+                    <div class="text-center me-3" style="min-width:40px;">
+                        <span class="badge bg-primary rounded-circle" style="width:32px;height:32px;font-size:16px;line-height:32px;padding:0;">1</span>
+                    </div>
+                    <div>
+                        <h6>导入演示数据</h6>
+                        <p class="text-muted">打开「系统管理」页面，点击「一键导入演示数据」按钮。系统会自动导入 Web 日志、登录日志、WAF 日志并执行规则检测。</p>
+                    </div>
+                </div>
+                <div class="d-flex mb-3">
+                    <div class="text-center me-3" style="min-width:40px;">
+                        <span class="badge bg-primary rounded-circle" style="width:32px;height:32px;font-size:16px;line-height:32px;padding:0;">2</span>
+                    </div>
+                    <div>
+                        <h6>查看告警</h6>
+                        <p class="text-muted">打开「告警中心」，查看规则引擎检测到的安全告警。可按等级、类型、状态筛选，点击单条告警查看详情。</p>
+                    </div>
+                </div>
+                <div class="d-flex mb-3">
+                    <div class="text-center me-3" style="min-width:40px;">
+                        <span class="badge bg-primary rounded-circle" style="width:32px;height:32px;font-size:16px;line-height:32px;padding:0;">3</span>
+                    </div>
+                    <div>
+                        <h6>AI 研判</h6>
+                        <p class="text-muted">在告警详情页点击「AI研判」按钮，系统会结合 RAG 知识库调用 AI 生成研判结果（需配置 OpenAI API Key）。</p>
+                    </div>
+                </div>
+                <div class="d-flex mb-3">
+                    <div class="text-center me-3" style="min-width:40px;">
+                        <span class="badge bg-primary rounded-circle" style="width:32px;height:32px;font-size:16px;line-height:32px;padding:0;">4</span>
+                    </div>
+                    <div>
+                        <h6>生成攻击链</h6>
+                        <p class="text-muted">打开「攻击链」页面，填写源 IP 后点击「生成攻击链」。系统会将相关告警按时间线组织为攻击阶段。</p>
+                    </div>
+                </div>
+                <div class="d-flex mb-3">
+                    <div class="text-center me-3" style="min-width:40px;">
+                        <span class="badge bg-primary rounded-circle" style="width:32px;height:32px;font-size:16px;line-height:32px;padding:0;">5</span>
+                    </div>
+                    <div>
+                        <h6>生成报告</h6>
+                        <p class="text-muted">在攻击链详情页点击「生成报告」，系统会生成包含时间线、证据、处置建议的安全事件报告。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">功能模块说明</div>
+            <div class="card-body">
+                <table class="table">
+                    <thead><tr><th>模块</th><th>功能</th><th>入口</th></tr></thead>
+                    <tbody>
+                        <tr><td>仪表盘</td><td>系统概览、告警趋势、风险评分</td><td>侧边栏「仪表盘」</td></tr>
+                        <tr><td>告警中心</td><td>告警列表、详情、状态管理、AI研判</td><td>侧边栏「告警中心」</td></tr>
+                        <tr><td>安全事件</td><td>聚合告警事件、事件详情、生成攻击链</td><td>侧边栏「安全事件」</td></tr>
+                        <tr><td>日志中心</td><td>日志上传、解析、检索</td><td>侧边栏「日志中心」</td></tr>
+                        <tr><td>攻击链</td><td>攻击链生成、时间线图谱、AI摘要</td><td>侧边栏「攻击链」</td></tr>
+                        <tr><td>报告中心</td><td>报告生成、查看、导出</td><td>侧边栏「报告中心」</td></tr>
+                        <tr><td>规则管理</td><td>规则列表、启用/禁用、执行检测</td><td>侧边栏「规则管理」</td></tr>
+                        <tr><td>系统管理</td><td>AI配置、阈值配置、演示导入、健康检查</td><td>侧边栏「系统配置」</td></tr>
+                        <tr><td>知识库</td><td>安全知识文档管理、RAG检索测试</td><td>侧边栏「安全知识库」</td></tr>
+                        <tr><td>审计日志</td><td>操作审计记录查询</td><td>侧边栏「审计日志」</td></tr>
+                        <tr><td>用户管理</td><td>用户列表、创建、启用/禁用</td><td>侧边栏「用户管理」</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">配置 AI 能力</div>
+            <div class="card-body">
+                <p class="text-muted">AI 研判功能需要配置 OpenAI API Key：</p>
+                <ol class="text-muted" style="font-size:14px;">
+                    <li>打开「系统管理」</li>
+                    <li>填写 API Key 和模型名称</li>
+                    <li>建议模型: gpt-4o-mini</li>
+                    <li>保存配置后即可使用</li>
+                </ol>
+                <div class="alert alert-warning py-2 mb-0">
+                    <small>未配置 API Key 时，系统会自动使用降级研判（基于规则引擎结果），不会阻断流程。</small>
+                </div>
+            </div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">部署信息</div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr><td>后端</td><td>Python Flask</td></tr>
+                    <tr><td>数据库</td><td>MySQL 8.0</td></tr>
+                    <tr><td>默认账号</td><td>admin / admin123</td></tr>
+                    <tr><td>Docker 部署</td><td><code>docker compose up -d</code></td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">键盘快捷键</div>
+            <div class="card-body">
+                <div class="mb-1"><kbd>G</kbd> + <kbd>D</kbd> 仪表盘</div>
+                <div class="mb-1"><kbd>G</kbd> + <kbd>A</kbd> 告警中心</div>
+                <div class="mb-1"><kbd>G</kbd> + <kbd>L</kbd> 日志中心</div>
+                <div class="mb-1"><kbd>G</kbd> + <kbd>C</kbd> 攻击链</div>
+                <div class="mb-1"><kbd>G</kbd> + <kbd>R</kbd> 报告中心</div>
+                <div class="mt-2 text-muted"><small>按住 G 再按对应字母快速跳转</small></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+// 键盘快捷键
+const keyMap = {
+    'd': '/', 'a': '/alerts', 'l': '/logs',
+    'c': '/chains', 'r': '/reports', 's': '/configs',
+};
+let gPressed = false;
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'g' || e.key === 'G') { gPressed = true; return; }
+    if (gPressed && keyMap[e.key]) { window.location.href = keyMap[e.key]; }
+});
+document.addEventListener('keyup', (e) => { if (e.key === 'g' || e.key === 'G') gPressed = false; });
+</script>
+{% endblock %}

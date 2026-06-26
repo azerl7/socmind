@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 报告中心{% endblock %}
+{% block page_title %}报告中心{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">报告列表</div>
+    <div class="card-body p-0">
+        <table class="table table-hover">
+            <thead><tr>
+                <th>报告编号</th><th>标题</th><th>类型</th><th>创建人</th><th>时间</th><th>操作</th>
+            </tr></thead>
+            <tbody id="reportTableBody"><tr><td colspan="6" class="text-center text-muted py-4">加载中...</td></tr></tbody>
+        </table>
+    </div>
+    <div class="card-body pt-0">
+        <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted" id="reportCountInfo"></small>
+            <div id="reportPagination"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadReports(page) {
+    const resp = await apiGet('/reports', { page, page_size: 20 });
+    const data = resp?.data || { items: [], total: 0 };
+    const tbody = document.getElementById('reportTableBody');
+
+    if (data.items.length) {
+        tbody.innerHTML = data.items.map(r => `<tr>
+            <td><small class="text-muted">${r.report_no || '-'}</small></td>
+            <td><a href="/reports/${r.id}" class="text-decoration-none fw-medium">${r.title}</a></td>
+            <td><span class="badge bg-secondary">${r.report_type}</span></td>
+            <td>${r.created_by || '-'}</td>
+            <td><small class="text-muted">${fmtTime(r.created_at)}</small></td>
+            <td><a href="/reports/${r.id}" class="btn btn-sm btn-outline-primary">查看</a></td>
+        </tr>`).join('');
+    } else {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">暂无报告</td></tr>';
+    }
+
+    document.getElementById('reportCountInfo').textContent = `共 ${data.total} 条记录`;
+    renderPagination(document.getElementById('reportPagination'), page, 20, data.total, loadReports);
+}
+
+loadReports(1);
+</script>
+{% endblock %}

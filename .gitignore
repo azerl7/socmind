@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+*.egg
+.eggs/
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+
+# Uploads
+uploads/*
+!uploads/.gitkeep
+
+# Generated Data
+demo_data/*
+!demo_data/.gitkeep
+
+# Database
+instance/
+
+# Docker
+mysql_data/
+
+# OS
+.DS_Store
+Thumbs.db

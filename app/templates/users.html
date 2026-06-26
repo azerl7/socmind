@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}SOCMind - 用户管理{% endblock %}
+{% block page_title %}用户管理{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <span>用户列表</span>
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal"><i class="bi bi-plus-lg"></i> 新增用户</button>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover">
+                    <thead><tr>
+                        <th>ID</th><th>用户名</th><th>昵称</th><th>邮箱</th><th>角色</th><th>状态</th><th>操作</th>
+                    </tr></thead>
+                    <tbody id="userTableBody"><tr><td colspan="7" class="text-center text-muted py-4">加载中...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">角色说明</div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <span class="badge bg-danger">admin</span>
+                    <small class="text-muted ms-2">系统管理员，拥有所有权限</small>
+                </div>
+                <div class="mb-3">
+                    <span class="badge bg-primary">analyst</span>
+                    <small class="text-muted ms-2">安全分析员，可进行研判和操作</small>
+                </div>
+                <div>
+                    <span class="badge bg-secondary">viewer</span>
+                    <small class="text-muted ms-2">只读用户，仅可查看数据</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新增用户弹窗 -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">新增用户</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addUserForm">
+                    <div class="mb-3">
+                        <label class="form-label">用户名 *</label>
+                        <input type="text" class="form-control" id="newUsername" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">密码 *</label>
+                        <input type="password" class="form-control" id="newPassword" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">昵称</label>
+                        <input type="text" class="form-control" id="newNickname">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">邮箱</label>
+                        <input type="email" class="form-control" id="newEmail">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">角色</label>
+                        <select class="form-select" id="newRoles" multiple>
+                            <option value="viewer" selected>只读用户 (viewer)</option>
+                            <option value="analyst">安全分析员 (analyst)</option>
+                            <option value="admin">系统管理员 (admin)</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-primary" onclick="addUser()">创建</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadUsers() {
+    const resp = await apiGet('/users');
+    const users = resp?.data || [];
+    const tbody = document.getElementById('userTableBody');
+    if (users.length) {
+        tbody.innerHTML = users.map(u => `<tr>
+            <td>${u.id}</td>
+            <td><strong>${u.username}</strong></td>
+            <td>${u.nickname || '-'}</td>
+            <td>${u.email || '-'}</td>
+            <td>${(u.roles || []).map(r => {
+                const cls = r === 'admin' ? 'danger' : r === 'analyst' ? 'primary' : 'secondary';
+                return `<span class="badge bg-${cls} me-1">${r}</span>`;
+            }).join('')}</td>
+            <td>${u.status ? '<span class="badge bg-success">启用</span>' : '<span class="badge bg-secondary">禁用</span>'}</td>
+            <td>
+                <button class="btn btn-sm ${u.status ? 'btn-outline-warning' : 'btn-outline-success'}"
+                    onclick="toggleUser(${u.id})">${u.status ? '禁用' : '启用'}</button>
+            </td>
+        </tr>`).join('');
+    } else {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">暂无用户</td></tr>';
+    }
+}
+
+async function toggleUser(id) {
+    const resp = await apiPost(`/users/${id}/toggle-status`);
+    if (resp.code === 0) { showToast('用户状态已更新'); loadUsers(); }
+    else showToast(resp.message, 'error');
+}
+
+async function addUser() {
+    const username = document.getElementById('newUsername').value.trim();
+    const password = document.getElementById('newPassword').value;
+    if (!username || !password) return showToast('用户名和密码不能为空', 'warning');
+    const sel = document.getElementById('newRoles');
+    const roles = Array.from(sel.selectedOptions).map(o => o.value);
+    const resp = await apiPost('/users', {
+        username, password,
+        nickname: document.getElementById('newNickname').value || username,
+        email: document.getElementById('newEmail').value,
+        roles: roles.length ? roles : ['viewer'],
+    });
+    if (resp.code === 0) {
+        showToast('用户创建成功');
+        bootstrap.Modal.getInstance(document.getElementById('addUserModal')).hide();
+        loadUsers();
+    } else {
+        showToast(resp.message, 'error');
+    }
+}
+
+loadUsers();
+</script>
+{% endblock %}
