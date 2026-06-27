@@ -5,6 +5,7 @@ Flask-Migrate==4.0.7
 PyMySQL==1.1.1
 cryptography==44.0.0
 openai==1.55.0
+httpx==0.27.2
 requests==2.32.3
 pandas==2.2.3
 python-dotenv==1.0.1
