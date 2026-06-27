@@ -6,22 +6,38 @@
 <div class="row g-3">
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header">AI 配置</div>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>AI 配置</span>
+                <span class="badge bg-info" id="aiProviderBadge">OpenAI</span>
+            </div>
             <div class="card-body">
                 <form id="aiConfigForm">
                     <div class="mb-3">
-                        <label class="form-label">OpenAI API Key</label>
-                        <input type="password" class="form-control" id="cfg_openai_api_key" placeholder="sk-...">
+                        <label class="form-label">AI Provider</label>
+                        <select class="form-select" id="cfg_ai_provider">
+                            <option value="openai">OpenAI</option>
+                            <option value="deepseek">DeepSeek</option>
+                            <option value="qwen">通义千问 (Qwen)</option>
+                            <option value="minimax">MiniMax</option>
+                        </select>
+                        <small class="text-muted">切换 provider 后下面的输入框会自动填充该 provider 的默认配置</small>
+                    </div>
+                    <hr>
+                    <div class="mb-3">
+                        <label class="form-label"><span id="lbl_api_key">OpenAI</span> API Key</label>
+                        <input type="password" class="form-control" id="cfg_ai_api_key" placeholder="sk-...">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">模型名称</label>
-                        <input type="text" class="form-control" id="cfg_openai_model" placeholder="gpt-4o-mini">
+                        <input type="text" class="form-control" id="cfg_ai_model" placeholder="gpt-4o-mini">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">API Base URL (可选)</label>
-                        <input type="text" class="form-control" id="cfg_openai_base_url" placeholder="https://api.openai.com">
+                        <label class="form-label">API Base URL</label>
+                        <input type="text" class="form-control" id="cfg_ai_base_url" placeholder="https://api.openai.com/v1">
                     </div>
                     <button type="submit" class="btn btn-primary">保存配置</button>
+                    <button type="button" class="btn btn-outline-info ms-1" onclick="testAIProvider(this)">测试连接</button>
+                    <div id="aiTestResult" class="mt-2"></div>
                 </form>
             </div>
         </div>
@@ -258,6 +274,51 @@ async function loadConfigs() {
             el.value = c.config_value || '';
         }
     });
+    // 加载完后手动联动一下 AI provider
+    onProviderChange();
+}
+
+// ── AI Provider 联动 ──
+
+const AI_PROVIDER_DEFAULTS = {
+    openai:  { label: 'OpenAI',           model: 'gpt-4o-mini',     base_url: 'https://api.openai.com/v1' },
+    deepseek:{ label: 'DeepSeek',         model: 'deepseek-chat',   base_url: 'https://api.deepseek.com/v1' },
+    qwen:    { label: '通义千问',         model: 'qwen-turbo',      base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
+    minimax: { label: 'MiniMax',          model: 'abab6.5s-chat',   base_url: 'https://api.minimax.chat/v1' },
+};
+
+function onProviderChange() {
+    const provider = document.getElementById('cfg_ai_provider').value;
+    const defaults = AI_PROVIDER_DEFAULTS[provider] || AI_PROVIDER_DEFAULTS.openai;
+
+    // 联动 label 和 badge
+    document.getElementById('lbl_api_key').textContent = defaults.label;
+    document.getElementById('aiProviderBadge').textContent = defaults.label;
+
+    // 如果 model / base_url 为空,填默认值(不覆盖用户已填的)
+    const modelEl = document.getElementById('cfg_ai_model');
+    const urlEl = document.getElementById('cfg_ai_base_url');
+    if (!modelEl.value) modelEl.value = defaults.model;
+    if (!urlEl.value) urlEl.value = defaults.base_url;
+}
+
+document.getElementById('cfg_ai_provider').addEventListener('change', onProviderChange);
+
+async function testAIProvider(btn) {
+    if (!btn) btn = event && event.target;
+    if (!btn) return;
+    btn.disabled = true;
+    document.getElementById('aiTestResult').innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0 auto;"></div> 连接中...';
+    const resp = await apiPost('/ai/test', {});
+    btn.disabled = false;
+    if (resp.code === 0) {
+        const d = resp.data || {};
+        document.getElementById('aiTestResult').innerHTML =
+            `<div class="alert alert-success py-1 mb-0">✓ 连接成功 (${d.provider_name || d.provider}${d.model ? ' / ' + d.model : ''})</div>`;
+    } else {
+        document.getElementById('aiTestResult').innerHTML =
+            `<div class="alert alert-danger py-1 mb-0">✗ ${resp.message || '连接失败'}</div>`;
+    }
 }
 
 async function saveConfig(key, value) {
@@ -266,10 +327,15 @@ async function saveConfig(key, value) {
 
 document.getElementById('aiConfigForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const provider = document.getElementById('cfg_ai_provider').value;
+    const apiKey = document.getElementById('cfg_ai_api_key').value;
+    const model = document.getElementById('cfg_ai_model').value;
+    const baseUrl = document.getElementById('cfg_ai_base_url').value;
     await Promise.all([
-        saveConfig('openai_api_key', document.getElementById('cfg_openai_api_key').value),
-        saveConfig('openai_model', document.getElementById('cfg_openai_model').value),
-        saveConfig('openai_base_url', document.getElementById('cfg_openai_base_url').value),
+        saveConfig('ai_provider', provider),
+        saveConfig(`ai_provider_${provider}_api_key`, apiKey),
+        saveConfig(`ai_provider_${provider}_model`, model),
+        saveConfig(`ai_provider_${provider}_base_url`, baseUrl),
     ]);
     showToast('AI 配置已保存');
 });

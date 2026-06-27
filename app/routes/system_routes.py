@@ -37,10 +37,14 @@ def health_check():
     from app.models.config import SystemConfig
     try:
         cfg_count = SystemConfig.query.count()
-        openai_key = SystemConfig.query.filter_by(config_key="openai_api_key").first()
-        results["openai"] = "configured" if (openai_key and openai_key.config_value) else "not configured"
+        from app.services.ai_service import _get_provider_config
+        cfg = _get_provider_config()
+        if cfg["api_key"]:
+            results["ai_provider"] = f"{cfg['provider_name']} ({cfg['model']}) - configured"
+        else:
+            results["ai_provider"] = f"{cfg['provider_name']} - not configured"
     except Exception as e:
-        results["openai"] = f"error: {e}"
+        results["ai_provider"] = f"error: {e}"
 
     # 目录检查
     upload_dir = current_app.config.get("UPLOAD_FOLDER", "")

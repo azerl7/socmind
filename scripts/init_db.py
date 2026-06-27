@@ -173,11 +173,48 @@ def init_database(force=False):
         # 6. 系统默认配置
         from app.models.config import SystemConfig
         default_configs = [
+            # ── 旧版兼容(将被 ai_provider_* 替代) ──
             {"config_key": "openai_api_key", "config_value": "", "config_type": "secret",
-             "description": "OpenAI API Key"},
+             "description": "OpenAI API Key (旧版兼容)"},
             {"config_key": "openai_model", "config_value": "gpt-4o-mini", "config_type": "string",
-             "description": "模型名称"},
-            {"config_key": "openai_base_url", "config_value": "", "config_type": "string", "description": "API Base URL"},
+             "description": "模型名称 (旧版兼容)"},
+            {"config_key": "openai_base_url", "config_value": "", "config_type": "string", "description": "API Base URL (旧版兼容)"},
+
+            # ── 多 Provider 配置 ──
+            {"config_key": "ai_provider", "config_value": "openai", "config_type": "string",
+             "description": "当前 AI Provider: openai / deepseek / qwen / minimax"},
+
+            # OpenAI
+            {"config_key": "ai_provider_openai_api_key", "config_value": "", "config_type": "secret",
+             "description": "OpenAI API Key"},
+            {"config_key": "ai_provider_openai_model", "config_value": "gpt-4o-mini", "config_type": "string",
+             "description": "OpenAI 模型名称"},
+            {"config_key": "ai_provider_openai_base_url", "config_value": "https://api.openai.com/v1", "config_type": "string",
+             "description": "OpenAI API Base URL"},
+
+            # DeepSeek
+            {"config_key": "ai_provider_deepseek_api_key", "config_value": "", "config_type": "secret",
+             "description": "DeepSeek API Key"},
+            {"config_key": "ai_provider_deepseek_model", "config_value": "deepseek-chat", "config_type": "string",
+             "description": "DeepSeek 模型名称"},
+            {"config_key": "ai_provider_deepseek_base_url", "config_value": "https://api.deepseek.com/v1", "config_type": "string",
+             "description": "DeepSeek API Base URL"},
+
+            # Qwen (通义千问)
+            {"config_key": "ai_provider_qwen_api_key", "config_value": "", "config_type": "secret",
+             "description": "通义千问 API Key (DashScope)"},
+            {"config_key": "ai_provider_qwen_model", "config_value": "qwen-turbo", "config_type": "string",
+             "description": "通义千问模型名称"},
+            {"config_key": "ai_provider_qwen_base_url", "config_value": "https://dashscope.aliyuncs.com/compatible-mode/v1", "config_type": "string",
+             "description": "通义千问 API Base URL (OpenAI 兼容)"},
+
+            # MiniMax
+            {"config_key": "ai_provider_minimax_api_key", "config_value": "", "config_type": "secret",
+             "description": "MiniMax API Key"},
+            {"config_key": "ai_provider_minimax_model", "config_value": "abab6.5s-chat", "config_type": "string",
+             "description": "MiniMax 模型名称"},
+            {"config_key": "ai_provider_minimax_base_url", "config_value": "https://api.minimax.chat/v1", "config_type": "string",
+             "description": "MiniMax API Base URL"},
             {"config_key": "brute_force_threshold", "config_value": "5", "config_type": "number",
              "description": "暴力破解阈值(同IP失败次数)"},
             {"config_key": "alert_time_window_minutes", "config_value": "10", "config_type": "number",

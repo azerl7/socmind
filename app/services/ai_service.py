@@ -1,4 +1,11 @@
-"""AI 研判服务：OpenAI API 调用、Prompt 模板、降级机制"""
+"""AI 研判服务：多 Provider LLM 调用、Prompt 模板、降级机制
+
+支持的 provider(通过 OpenAI 兼容协议):
+  - openai    : OpenAI 官方
+  - deepseek  : DeepSeek
+  - qwen      : 阿里通义千问
+  - minimax   : MiniMax
+"""
 import json
 import logging
 from datetime import datetime, timezone
@@ -15,25 +22,82 @@ from app.utils.security import generate_alert_no
 logger = logging.getLogger(__name__)
 
 
-def _get_openai_config() -> dict:
-    """从系统配置表获取 OpenAI 配置"""
+# ── Provider 元信息 ──
+
+AI_PROVIDERS = {
+    "openai": {
+        "name": "OpenAI",
+        "default_base_url": "https://api.openai.com/v1",
+        "default_model": "gpt-4o-mini",
+    },
+    "deepseek": {
+        "name": "DeepSeek",
+        "default_base_url": "https://api.deepseek.com/v1",
+        "default_model": "deepseek-chat",
+    },
+    "qwen": {
+        "name": "通义千问 (Qwen)",
+        "default_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "default_model": "qwen-turbo",
+    },
+    "minimax": {
+        "name": "MiniMax",
+        "default_base_url": "https://api.minimax.chat/v1",
+        "default_model": "abab6.5s-chat",
+    },
+}
+
+
+def _get_provider_config() -> dict:
+    """从系统配置表读取当前 Provider 的配置
+
+    配置 key 约定:
+      ai_provider                    当前选中的 provider (openai/deepseek/qwen/minimax)
+      ai_provider_<name>_api_key     API Key
+      ai_provider_<name>_model       模型名
+      ai_provider_<name>_base_url    Base URL
+
+    兼容:openai_api_key / openai_model / openai_base_url 在新 key 不存在时仍可生效
+    """
     configs = {c.config_key: c.config_value for c in SystemConfig.query.all()}
+
+    provider = (configs.get("ai_provider") or "openai").lower()
+    provider_info = AI_PROVIDERS.get(provider, AI_PROVIDERS["openai"])
+    prefix = f"ai_provider_{provider}_"
+
+    # 兼容旧的 openai_* key
+    def _resolve(suffix: str, default: str) -> str:
+        new_val = configs.get(f"{prefix}{suffix}", "")
+        if new_val:
+            return new_val
+        if provider == "openai":
+            old_val = configs.get(f"openai_{suffix.replace('api_', '')}" if suffix == "api_key" else f"openai_{suffix}", "")
+            if old_val:
+                return old_val
+        return default
+
     return {
-        "api_key": configs.get("openai_api_key", ""),
-        "model": configs.get("openai_model", "gpt-4o-mini"),
-        "base_url": configs.get("openai_base_url", ""),
+        "provider": provider,
+        "provider_name": provider_info["name"],
+        "api_key": _resolve("api_key", ""),
+        "model": _resolve("model", provider_info["default_model"]),
+        "base_url": _resolve("base_url", provider_info["default_base_url"]),
     }
 
 
-def _call_openai(prompt: str, system_prompt: str = "") -> dict:
-    """调用 OpenAI API
+def _call_llm(prompt: str, system_prompt: str = "") -> dict:
+    """调用 LLM API(走 OpenAI 兼容协议)
 
     Returns:
         {"success": bool, "content": str, "error": str}
     """
-    cfg = _get_openai_config()
+    cfg = _get_provider_config()
     if not cfg["api_key"]:
-        return {"success": False, "content": "", "error": "OpenAI API Key 未配置"}
+        return {
+            "success": False,
+            "content": "",
+            "error": f"{cfg['provider_name']} API Key 未配置",
+        }
 
     try:
         from openai import OpenAI
@@ -75,11 +139,13 @@ def _call_openai(prompt: str, system_prompt: str = "") -> dict:
             "prompt_tokens": tokens_in,
             "completion_tokens": tokens_out,
             "total_tokens": tokens_in + tokens_out,
+            "provider": cfg["provider"],
+            "model": cfg["model"],
         }
 
     except Exception as e:
-        logger.error(f"OpenAI API 调用失败: {e}")
-        return {"success": False, "content": "", "error": str(e)}
+        logger.error(f"LLM API 调用失败 ({cfg['provider_name']}): {e}")
+        return {"success": False, "content": "", "error": str(e), "provider": cfg["provider"]}
 
 
 def _log_ai_call(target_type: str, target_id: int, model: str,
@@ -197,7 +263,7 @@ def analyze_alert(alert_id: int, use_rag: bool = True, include_context: bool = T
     if not alert:
         return {"error": "告警不存在", "code": 40401}
 
-    cfg = _get_openai_config()
+    cfg = _get_provider_config()
 
     # 检索 RAG 知识
     rag_knowledge = ""
@@ -208,8 +274,8 @@ def analyze_alert(alert_id: int, use_rag: bool = True, include_context: bool = T
     # 构建 Prompt
     prompt = _build_single_alert_prompt(alert, rag_knowledge)
 
-    # 调用 OpenAI
-    result = _call_openai(prompt)
+    # 调用 LLM
+    result = _call_llm(prompt)
 
     analysis_id = None
 
@@ -297,9 +363,9 @@ def analyze_chain(chain_id: int) -> dict:
     if not chain:
         return {"error": "攻击链不存在", "code": 40401}
 
-    cfg = _get_openai_config()
+    cfg = _get_provider_config()
     prompt = _build_chain_prompt(chain)
-    result = _call_openai(prompt)
+    result = _call_llm(prompt)
 
     if result["success"]:
         analysis = AIAnalysis(

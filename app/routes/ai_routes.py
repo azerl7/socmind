@@ -113,4 +113,34 @@ def revise_analysis(analysis_id):
 
     db.session.commit()
     return jsonify(success_response(analysis.to_dict()))
+
+
+@ai_bp.route("/test", methods=["POST"])
+def test_provider():
+    """测试当前 provider 是否可连接"""
+    from app.services.ai_service import _get_provider_config, _call_llm
+
+    cfg = _get_provider_config()
+    if not cfg["api_key"]:
+        return jsonify(error_response(
+            40001,
+            f"{cfg['provider_name']} API Key 未配置,请先在系统配置页填写"
+        )), 400
+
+    # 用最小 prompt 测试连接
+    result = _call_llm("回复一个字:OK", system_prompt="")
+    if result.get("success"):
+        return jsonify(success_response({
+            "provider": cfg["provider"],
+            "provider_name": cfg["provider_name"],
+            "model": cfg["model"],
+            "base_url": cfg["base_url"],
+            "response": result.get("content", "")[:200],
+            "tokens_used": result.get("total_tokens", 0),
+        }))
+
+    return jsonify(error_response(
+        50001,
+        f"{cfg['provider_name']} 调用失败: {result.get('error', '未知错误')}"
+    )), 500
     
