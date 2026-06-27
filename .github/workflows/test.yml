@@ -23,5 +23,8 @@ jobs:
           FLASK_ENV: testing
         run: |
           python -m pytest tests/ -v
+<<<<<<< HEAD
       - name: Build docker image
         run: docker build -t socmind:test .
+=======
+>>>>>>> c2fa8c6f431e7c9f11b893fa393f5c62d8603782
