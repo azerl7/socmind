@@ -39,7 +39,14 @@
                 <button class="btn btn-sm btn-outline-primary" id="btnReviseAI" style="display:none;" onclick="toggleEditAI()"><i class="bi bi-pencil"></i> 修订</button>
             </div>
             <div class="card-body">
-                <div id="aiResult"><p class="text-muted mb-0">点击「AI研判」按钮进行分析</p></div>
+                <div id="aiResult"><p class="text-muted mb-0">点击「AI研判」运行新分析,或从下方研判历史中选择一条查看</p></div>
+
+                <hr class="my-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <strong><i class="bi bi-clock-history"></i> 研判历史 <span class="badge bg-secondary" id="aiHistoryCount">0</span></strong>
+                    <small class="text-muted">点击记录查看详情</small>
+                </div>
+                <div id="aiHistoryList"><p class="text-muted small mb-0">加载中...</p></div>
                 <div id="aiEditPanel" style="display:none;" class="mt-2">
                     <hr>
                     <div class="mb-2"><label class="form-label">摘要</label><textarea class="form-control form-control-sm" id="editSummary" rows="2"></textarea></div>
@@ -134,6 +141,9 @@ async function loadAlertDetail() {
         document.getElementById('rawLogContent').textContent = a.raw_log.raw_content || '(无原始日志)';
     }
 
+    // 加载研判历史列表(只是列表,不渲染到主区)
+    loadAIHistory();
+
     // 证据
     const ev = a.evidences || [];
     const evList = document.getElementById('evidenceList');
@@ -224,6 +234,97 @@ async function updateStatus(status) {
     else showToast(resp.message, 'error');
 }
 
+async function loadAIHistory() {
+    try {
+        const resp = await apiGet('/ai/analyses', {
+            target_type: 'alert',
+            target_id: alertId,
+            page_size: 50,
+            page: 1,
+        });
+        const items = resp?.data?.items || [];
+        const countEl = document.getElementById('aiHistoryCount');
+        const listEl = document.getElementById('aiHistoryList');
+
+        countEl.textContent = items.length;
+
+        if (!items.length) {
+            listEl.innerHTML = '<p class="text-muted small mb-0">暂无研判记录,点击上方「AI研判」运行第一次分析</p>';
+            return;
+        }
+
+        // 渲染列表,每条可点击
+        listEl.innerHTML = items.map(r => {
+            const parsed = r.result_json || {};
+            const isFallback = r.status === 'fallback';
+            const statusBadge = isFallback
+                ? '<span class="badge bg-warning text-dark">降级</span>'
+                : '<span class="badge bg-success">成功</span>';
+            const summary = (parsed.summary || r.summary || '(无摘要)').substring(0, 80);
+            return `<div class="ai-history-item p-2 mb-1 border rounded" data-id="${r.id}"
+                         style="cursor:pointer;background:#fafafa;"
+                         onclick="showAnalysisById(${r.id})">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <small>
+                        ${statusBadge}
+                        <strong>${r.model_name || 'unknown'}</strong>
+                        ${severityBadge(parsed.risk_level || r.risk_level)}
+                        <span class="text-muted ms-2">${fmtTime(r.created_at)}</span>
+                    </small>
+                    ${r.is_revised ? '<span class="badge bg-info">已修订</span>' : ''}
+                </div>
+                <div style="font-size:13px;color:#555;">${summary}</div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        document.getElementById('aiHistoryList').innerHTML =
+            `<div class="alert alert-danger small py-1 mb-0">加载历史失败: ${e.message || '未知错误'}</div>`;
+    }
+}
+
+async function showAnalysisById(analysisId) {
+    try {
+        const resp = await apiGet(`/ai/analyses/${analysisId}`);
+        const r = resp?.data;
+        if (!r) return;
+
+        const parsed = r.result_json || {};
+        const isFallback = r.status === 'fallback';
+        const html = `
+            <div class="mb-2"><strong>摘要:</strong> ${parsed.summary || r.summary || '-'}</div>
+            <div class="mb-2"><strong>风险等级:</strong> ${severityBadge(parsed.risk_level || r.risk_level)}</div>
+            <div class="mb-2"><strong>攻击阶段:</strong> ${parsed.attack_stage || '-'}</div>
+            <div class="mb-2"><strong>误报可能性:</strong> ${parsed.false_positive_possibility || '-'}</div>
+            <hr>
+            <div class="mb-2"><strong>管理摘要:</strong> ${parsed.management_summary || '-'}</div>
+            ${parsed.technical_steps ? '<div><strong>处置步骤:</strong><ol>' + parsed.technical_steps.map(s => `<li>${s}</li>`).join('') + '</ol></div>' : ''}
+            <div class="alert alert-secondary py-1 mb-0 mt-2 d-flex justify-content-between">
+                <small><i class="bi bi-clock-history"></i> ${r.model_name || ''} · ${fmtTime(r.created_at)} · ID #${r.id}</small>
+                ${isFallback ? '<small class="text-warning">⚠ 降级研判(AI 未配置)</small>' : ''}
+            </div>`;
+        document.getElementById('aiResult').innerHTML = html;
+        document.getElementById('suggestionBox').innerHTML =
+            `<p>${parsed.suggestion || r.suggestion || '-'}</p>`;
+
+        // 高亮当前选中的历史项
+        document.querySelectorAll('.ai-history-item').forEach(el => {
+            el.style.background = el.dataset.id == analysisId ? '#e3f2fd' : '#fafafa';
+            el.style.borderColor = el.dataset.id == analysisId ? '#2196f3' : '';
+        });
+
+        // 修订按钮:仅成功研判可修订
+        const btn = document.getElementById('btnReviseAI');
+        if (!isFallback && r.id) {
+            btn.style.display = '';
+            btn.dataset.analysisId = r.id;
+        } else {
+            btn.style.display = 'none';
+        }
+    } catch (e) {
+        showToast('加载研判详情失败: ' + (e.message || '未知错误'), 'error');
+    }
+}
+
 async function runAI() {
     document.getElementById('aiResult').innerHTML = '<div class="loading"><div class="spinner"></div><p>AI 研判中...</p></div>';
     document.getElementById('suggestionBox').innerHTML = '<p class="text-muted">生成中...</p>';
@@ -248,6 +349,9 @@ async function runAI() {
         document.getElementById('btnReviseAI').style.display = '';
         document.getElementById('btnReviseAI').dataset.analysisId = r.analysis_id;
     }
+
+    // 刷新下方研判历史列表
+    loadAIHistory();
 }
 
 // AI-08: 人工修订功能
