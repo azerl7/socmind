@@ -33,7 +33,7 @@ def create_rule():
 
     data["created_by"] = current_user.username
     rule = create_suppression(data)
-    return jsonify(success_response(rule.to_dict()), 201)
+    return success_response(rule.to_dict()), 201
 
 
 @suppression_bp.route("/<int:rule_id>", methods=["PUT"])

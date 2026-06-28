@@ -67,7 +67,7 @@ def add_node(chain_id):
     )
     db.session.add(node)
     db.session.commit()
-    return jsonify(success_response(node.to_dict()), 201)
+    return success_response(node.to_dict()), 201
 
 
 @chain_bp.route("/nodes/<int:node_id>", methods=["PUT"])

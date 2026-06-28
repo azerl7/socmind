@@ -32,7 +32,7 @@ def create_comment(alert_id: int):
         content=content,
         comment_type=data.get("comment_type", "comment"),
     )
-    return jsonify(success_response(comment.to_dict()), 201)
+    return success_response(comment.to_dict()), 201
 
 
 @comment_bp.route("/<int:comment_id>", methods=["DELETE"])
