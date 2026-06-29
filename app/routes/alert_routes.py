@@ -10,6 +10,7 @@ from app.services.alert_service import (
     deduplicate_alerts,
 )
 from app.services.risk_score_service import recalculate_alert_score
+from app.services.audit_service import record_audit
 from app.utils.response import success_response, error_response, paginated_response
 
 alert_bp = Blueprint("alert_routes", __name__)
@@ -52,6 +53,10 @@ def update_status(alert_id):
     new_status = data.get("status", "")
     comment = data.get("comment", "")
 
+    # 改状态前先读出旧状态(用于审计 detail)
+    old_alert = db.session.get(Alert, alert_id)
+    old_status = old_alert.status if old_alert else None
+
     if not update_alert_status(
         alert_id, new_status, comment,
         user_id=current_user.id, username=current_user.username,
@@ -59,6 +64,25 @@ def update_status(alert_id):
         return jsonify(error_response(40001, "状态更新失败，请检查状态值")), 400
 
     alert = db.session.get(Alert, alert_id)
+
+    # 记录审计日志(后端统一记录,不依赖前端调用)
+    record_audit(
+        action="alert_status_changed",
+        target_type="alert",
+        target_id=alert_id,
+        detail={
+            "from": old_status,
+            "to": new_status,
+            "comment": comment,
+            # 附告警关键信息,审计日志一眼能看出是关于哪条告警的
+            "alert_no": alert.alert_no,
+            "title": alert.title,
+            "attack_type": alert.attack_type,
+            "severity": alert.severity,
+            "src_ip": alert.src_ip,
+        },
+    )
+
     return jsonify(success_response({"id": alert.id, "status": alert.status}))
 
 

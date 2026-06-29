@@ -1,4 +1,5 @@
 """认证接口"""
+import logging
 from flask import Blueprint, request, jsonify, redirect, url_for, render_template
 from app import db
 from app.models.user import User
@@ -7,22 +8,17 @@ from app.utils.response import success_response, error_response
 
 auth_bp = Blueprint("auth_routes", __name__)
 
+logger = logging.getLogger(__name__)
 
 def _record_login(username, ip, ua, result, reason=None):
     """记录登录尝试"""
     try:
-        log = LoginLog(
-            username=username,
-            ip_address=ip or "unknown",
-            user_agent=(ua or "")[:256],
-            result=result,
-            fail_reason=reason,
-        )
+        log = LoginLog(...)
         db.session.add(log)
         db.session.commit()
-    except Exception:
+    except Exception as e:
         db.session.rollback()
-
+        logger.error(f"记录登录日志失败: {e}", exc_info=True)
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():

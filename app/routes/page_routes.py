@@ -16,20 +16,29 @@ def login_page():
     if request.method == "POST":
         username = request.form.get("username", "")
         password = request.form.get("password", "")
+        client_ip = request.remote_addr or ""
+        ua = request.headers.get("User-Agent", "")
+
+        # 记录登录尝试(从 auth_routes 复用 _record_login)
+        from app.routes.auth_routes import _record_login
 
         if not username or not password:
+            _record_login(username, client_ip, ua, "fail", "用户名或密码不能为空")
             return render_template("login.html", error="用户名和密码不能为空")
 
         user = User.query.filter_by(username=username).first()
         if not user or not user.check_password(password):
+            _record_login(username, client_ip, ua, "fail", "用户名或密码错误")
             return render_template("login.html", error="用户名或密码错误")
 
         if user.status == 0:
+            _record_login(username, client_ip, ua, "fail", "用户已禁用")
             return render_template("login.html", error="用户已禁用")
 
         login_user(user)
         user.last_login_at = db.func.now()
         db.session.commit()
+        _record_login(username, client_ip, ua, "success")
         return redirect(url_for("pages.dashboard"))
 
     return render_template("login.html")
