@@ -95,6 +95,29 @@
         </div>
     </div>
 </div>
+
+<!-- 状态变更弹窗(代替 prompt) -->
+<div class="modal fade" id="statusChangeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">状态变更</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>将告警状态变更为: <strong id="statusChangeLabel"></strong></p>
+                <div class="mb-2">
+                    <label class="form-label">变更原因 (可选)</label>
+                    <textarea class="form-control" id="statusChangeComment" rows="3" placeholder="如:扫描器测试,已确认是 Nmap / 误报 / 真实攻击已处置"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-primary" onclick="confirmStatusChange()">确认变更</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -425,16 +448,30 @@ async function addComment() {
     }
 }
 
-// 在状态变更时自动添加系统笔记
-const origUpdateStatus = updateStatus;
-updateStatus = async function(status) {
-    const resp = await apiPatch(`/alerts/${alertId}/status`, { status });
+// 在状态变更时弹出 modal(代替原生 prompt())
+let pendingStatus = null;
+function updateStatus(status) {
+    pendingStatus = status;
+    const statusLabels = { confirmed: '已确认', false_positive: '误报', closed: '已关闭', in_progress: '处理中' };
+    document.getElementById('statusChangeLabel').textContent = statusLabels[status] || status;
+    document.getElementById('statusChangeComment').value = '';
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('statusChangeModal'));
+    modal.show();
+}
+
+async function confirmStatusChange() {
+    if (!pendingStatus) return;
+    const status = pendingStatus;
+    const statusLabels = { confirmed: '已确认', false_positive: '误报', closed: '已关闭', in_progress: '处理中' };
+    const comment = document.getElementById('statusChangeComment').value.trim();
+
+    const resp = await apiPatch(`/alerts/${alertId}/status`, { status, comment });
     if (resp.code === 0) {
-        const statusLabels = { confirmed: '已确认', false_positive: '误报', closed: '已关闭', in_progress: '处理中' };
         await apiPost(`/comments/${alertId}`, {
-            content: `状态变更为: ${statusLabels[status] || status}`,
+            content: `状态变更为: ${statusLabels[status] || status}${comment ? ` (备注: ${comment})` : ''}`,
             comment_type: 'status_change',
         });
+        bootstrap.Modal.getInstance(document.getElementById('statusChangeModal')).hide();
         showToast('状态已更新');
         loadAlertDetail();
         loadComments();

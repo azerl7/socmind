@@ -45,14 +45,38 @@ async function loadLogs(page) {
     const tbody = document.getElementById('logTableBody');
 
     if (data.items.length) {
-        tbody.innerHTML = data.items.map(l => `<tr>
-            <td><strong>${l.username}</strong></td>
-            <td><code>${l.ip_address}</code></td>
-            <td>${l.result === 'success' ? '<span class="badge bg-success">成功</span>' : '<span class="badge bg-danger">失败</span>'}</td>
-            <td><small>${l.fail_reason || '-'}</small></td>
-            <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.user_agent || ''}">${l.user_agent || '-'}</td>
-            <td><small>${fmtTime(l.created_at)}</small></td>
-        </tr>`).join('');
+        tbody.innerHTML = data.items.map(l => {
+            // 解析 UA 串为浏览器名(完整 UA 放 title)
+            const ua = l.user_agent || '';
+            let uaShort = '-';
+            let uaTitle = '';
+            if (ua) {
+                uaTitle = ua;
+                if (/Edg\//.test(ua)) uaShort = 'Edge';
+                else if (/Chrome\//.test(ua) && !/Chromium/.test(ua)) uaShort = 'Chrome';
+                else if (/Firefox\//.test(ua)) uaShort = 'Firefox';
+                else if (/Safari\//.test(ua) && !/Chrome/.test(ua)) uaShort = 'Safari';
+                else if (/curl\//.test(ua)) uaShort = 'curl';
+                else if (/Postman/.test(ua)) uaShort = 'Postman';
+                else if (/python-requests/.test(ua)) uaShort = 'python-requests';
+                else if (/python/.test(ua)) uaShort = 'Python';
+                else uaShort = ua.length > 20 ? ua.substring(0, 20) + '…' : ua;
+            }
+            // 失败原因:失败时高亮
+            const reasonHtml = l.fail_reason
+                ? `<span class="badge bg-danger bg-opacity-25 text-danger" title="${l.fail_reason}">
+                    <i class="bi bi-exclamation-circle"></i> ${l.fail_reason}
+                   </span>`
+                : '<small class="text-muted">-</small>';
+            return `<tr>
+                <td><strong>${l.username}</strong></td>
+                <td><code>${l.ip_address}</code></td>
+                <td>${l.result === 'success' ? '<span class="badge bg-success">成功</span>' : '<span class="badge bg-danger">失败</span>'}</td>
+                <td>${reasonHtml}</td>
+                <td title="${uaTitle}"><span class="badge bg-light text-dark">${uaShort}</span></td>
+                <td><small class="text-muted">${fmtTime(l.created_at)}</small></td>
+            </tr>`;
+        }).join('');
     } else {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">暂无登录记录</td></tr>';
     }

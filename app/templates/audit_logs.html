@@ -38,16 +38,29 @@ async function loadLogs(page) {
     const tbody = document.getElementById('auditTableBody');
 
     if (data.items.length) {
-        tbody.innerHTML = data.items.map(l => `<tr>
-            <td><small>${l.id}</small></td>
-            <td>${l.username || '-'}</td>
-            <td><span class="badge bg-info">${l.action}</span></td>
-            <td>${l.target_type || '-'}</td>
-            <td>${l.target_id || '-'}</td>
-            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${l.detail ? JSON.stringify(l.detail) : '-'}</td>
-            <td><code>${l.ip_address || '-'}</code></td>
-            <td><small class="text-muted">${fmtTime(l.created_at)}</small></td>
-        </tr>`).join('');
+        tbody.innerHTML = data.items.map(l => {
+            const detail = l.detail || {};
+            // 根据 action 类型格式化详情
+            let detailHtml = '-';
+            if (l.action === 'alert_status_changed') {
+                detailHtml = `<div><strong>${detail.from || '-'}</strong> → <strong>${detail.to || '-'}</strong></div>`;
+                if (detail.title) detailHtml += `<div class="small text-muted">${detail.title}</div>`;
+                if (detail.alert_no) detailHtml += `<div class="small"><code>${detail.alert_no}</code></div>`;
+                if (detail.comment) detailHtml += `<div class="small text-info"><i class="bi bi-chat-left-text"></i> ${detail.comment}</div>`;
+            } else {
+                detailHtml = `<code style="font-size:11px;">${JSON.stringify(detail)}</code>`;
+            }
+            return `<tr>
+                <td><small>${l.id}</small></td>
+                <td>${l.username || '-'}</td>
+                <td><span class="badge bg-info">${l.action}</span></td>
+                <td>${l.target_type || '-'}</td>
+                <td>${l.target_id || '-'}</td>
+                <td style="max-width:280px;">${detailHtml}</td>
+                <td><code>${l.ip_address || '-'}</code></td>
+                <td><small class="text-muted">${fmtTime(l.created_at)}</small></td>
+            </tr>`;
+        }).join('');
     } else {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">暂无审计日志</td></tr>';
     }

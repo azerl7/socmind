@@ -233,6 +233,52 @@
         </div>
     </div>
 </div>
+
+<!-- 抑制规则添加弹窗(代替 5 个 prompt) -->
+<div class="modal fade" id="addSuppressionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">添加抑制规则</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addSuppressionForm">
+                    <div class="mb-2">
+                        <label class="form-label">规则名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="suppName" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">匹配类型 <span class="text-danger">*</span></label>
+                        <select class="form-select" id="suppType" required>
+                            <option value="ip">IP</option>
+                            <option value="attack_type">攻击类型</option>
+                            <option value="severity">严重等级</option>
+                            <option value="rule_code">规则编码</option>
+                            <option value="combination">组合</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">匹配值 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="suppValue" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">抑制理由</label>
+                        <input type="text" class="form-control" id="suppReason" placeholder="可选,如:已知扫描器">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">过期小时数</label>
+                        <input type="number" class="form-control" id="suppHours" placeholder="留空 = 永久有效">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-primary" onclick="addSuppression()">添加</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -490,16 +536,35 @@ async function loadSuppressions() {
 }
 
 function showAddSuppression() {
-    const name = prompt('规则名称：');
-    if (!name) return;
-    const type = prompt('匹配类型 (ip/attack_type/severity/rule_code/combination)：', 'ip');
-    if (!type) return;
-    const value = prompt('匹配值：');
-    if (!value) return;
-    const reason = prompt('抑制理由（可选）：') || '';
-    const hours = prompt('过期小时数（留空=永久）：') || '';
-    apiPost('/suppressions', { rule_name: name, match_type: type, match_value: value, reason, expires_in_hours: hours ? parseInt(hours) : null })
-        .then(r => { showToast(r.code === 0 ? '规则已添加' : r.message || '添加失败', r.code === 0 ? 'success' : 'error'); loadSuppressions(); });
+    // 清空表单,打开 modal(代替 5 个连续 prompt)
+    document.getElementById('addSuppressionForm').reset();
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('addSuppressionModal'));
+    modal.show();
+}
+
+async function addSuppression() {
+    const name = document.getElementById('suppName').value.trim();
+    const type = document.getElementById('suppType').value;
+    const value = document.getElementById('suppValue').value.trim();
+    const reason = document.getElementById('suppReason').value.trim();
+    const hours = document.getElementById('suppHours').value.trim();
+
+    if (!name || !value) {
+        showToast('规则名称和匹配值不能为空', 'warning');
+        return;
+    }
+
+    const resp = await apiPost('/suppressions', {
+        rule_name: name, match_type: type, match_value: value,
+        reason, expires_in_hours: hours ? parseInt(hours) : null,
+    });
+    if (resp.code === 0) {
+        bootstrap.Modal.getInstance(document.getElementById('addSuppressionModal')).hide();
+        showToast('规则已添加', 'success');
+        loadSuppressions();
+    } else {
+        showToast(resp.message || '添加失败', 'error');
+    }
 }
 
 async function toggleSuppression(id) {
