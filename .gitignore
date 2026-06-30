@@ -37,3 +37,6 @@ mysql_data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Backup files\n*.bak
+
