@@ -449,7 +449,10 @@ def write_host_logs(path, base_time):
 
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    base_time = datetime(2026, 5, 7, 8, 0, 0, tzinfo=timezone.utc)
+    # 用当前时间作为基准,这样演示告警的 event_time 在最近时间窗口内,
+    # 图表 / 趋势 / 资产关联等功能能正常使用
+    # (减 1 小时避免 offset 累加后变成未来时间)
+    base_time = datetime.now(timezone.utc) - timedelta(hours=1)
     write_web_logs(os.path.join(OUTPUT_DIR, "web_access.log"), base_time)
     write_login_logs(os.path.join(OUTPUT_DIR, "login_logs.csv"), base_time)
     write_waf_logs(os.path.join(OUTPUT_DIR, "waf_alerts.json"), base_time)

@@ -134,33 +134,38 @@ async function buildRelations() {
 }
 
 async function showTopology() {
-    const modal = new bootstrap.Modal(document.getElementById('topologyModal'));
-    modal.show();
+    const modalEl = document.getElementById('topologyModal');
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
 
     if (!topologyChart) {
         topologyChart = echarts.init(document.getElementById('topologyChart'));
     }
-    topologyChart.showLoading();
 
-    const resp = await apiGet('/assets/topology');
-    const data = resp?.data || { nodes: [], edges: [] };
+    // 关键修复: 等 modal 动画完成 / canvas 拿到真实尺寸后再 resize + 渲染
+    // 否则 ECharts 会基于 0×0 的初始 canvas 渲染,图缩在左上角
+    modalEl.addEventListener('shown.bs.modal', async () => {
+        topologyChart.resize();
+        topologyChart.showLoading();
 
-    if (data.nodes.length === 0) {
-        topologyChart.hideLoading();
-        topologyChart.setOption({
-            title: { text: '暂无关联系数据', left: 'center', top: 'center', textStyle: { color: '#7f8c8d' } }
+        const resp = await apiGet('/assets/topology');
+        const data = resp?.data || { nodes: [], edges: [] };
+
+        if (data.nodes.length === 0) {
+            topologyChart.hideLoading();
+            topologyChart.setOption({
+                title: { text: '暂无关联系数据', left: 'center', top: 'center', textStyle: { color: '#7f8c8d' } }
+            });
+            return;
+        }
+
+        // 分类
+        const categories = [{ name: 'host' }, { name: 'webapp' }, { name: 'database' }, { name: 'external' }, { name: 'unknown' }];
+        data.nodes.forEach(n => {
+            n.category = categories.findIndex(c => c.name === n.category);
+            if (n.category < 0) n.category = 4;
         });
-        return;
-    }
 
-    // 分类
-    const categories = [{ name: 'host' }, { name: 'webapp' }, { name: 'database' }, { name: 'external' }, { name: 'unknown' }];
-    data.nodes.forEach(n => {
-        n.category = categories.findIndex(c => c.name === n.category);
-        if (n.category < 0) n.category = 4;
-    });
-
-    topologyChart.hideLoading();
+        topologyChart.hideLoading();
     topologyChart.setOption({
         title: { text: '资产关联拓扑', left: 'center' },
         tooltip: { formatter: p => p.dataType === 'node' ? `<strong>${p.name}</strong><br/>风险分: ${p.data.risk_score || '-'}` : `${p.data.source} → ${p.data.target}` },
@@ -180,6 +185,7 @@ async function showTopology() {
             emphasis: { focus: 'adjacency' },
         }]
     });
+    }, { once: true });
 }
 
 loadAssets(1);
