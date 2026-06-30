@@ -4,10 +4,21 @@ import json
 import io
 import re
 from datetime import datetime
+from time import timezone
 from typing import Generator
 
 from app import db
 from app.models.log import RawLog, LogImportTask
+
+
+# 不同类型日志对应的目标 IP(模拟「被攻击的资源」)
+# nginx / host / login 日志格式本身不带目标 IP 字段,只能由解析器侧硬编码
+# waf / network 原始日志里已经包含 dst_ip,不在这里处理
+LOG_TARGET_IPS = {
+    "web": "10.0.0.50",     # Web 服务器 IP(被攻击资源)
+    "host": "10.0.0.20",    # SSH 主机 IP(被尝试登录的服务器)
+    "login": "10.0.0.20",   # 业务登录主机 IP
+}
 
 
 # ── SSH auth.log 格式 ──
@@ -53,6 +64,7 @@ def parse_auth_log(line: str) -> dict | None:
         return {
             "log_type": "host",
             "src_ip": src_ip,
+            "dst_ip": LOG_TARGET_IPS["host"],
             "username": username,
             "action": "ssh_login",
             "result": result,
@@ -73,6 +85,7 @@ def parse_auth_log(line: str) -> dict | None:
         return {
             "log_type": "host",
             "src_ip": "",
+            "dst_ip": LOG_TARGET_IPS["host"],
             "username": g.get("username", ""),
             "action": "sudo",
             "result": "success" if g.get("command") else "unknown",
@@ -112,6 +125,7 @@ def parse_nginx_log(line: str) -> dict | None:
     return {
         "log_type": "web",
         "src_ip": g["ip"],
+        "dst_ip": LOG_TARGET_IPS["web"],
         "http_method": g["method"],
         "url": g["url"],
         "status_code": int(g["status"]) if g["status"].isdigit() else None,
@@ -256,6 +270,7 @@ def parse_login_csv_row(row: dict) -> dict | None:
     return {
         "log_type": "login",
         "src_ip": row.get("src_ip", ""),
+        "dst_ip": LOG_TARGET_IPS["login"],
         "username": row.get("username", ""),
         "action": row.get("action", "login"),
         "result": "success" if result in ("success", "true", "1", "ok") else "fail",

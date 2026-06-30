@@ -112,17 +112,41 @@ def _update_risk_scores():
     db.session.commit()
 
 
-def build_relations(src_ip: str | None = None, time_window_minutes: int = 60) -> dict:
+def _resolve_target(alert) -> str | None:
+    """根据告警字段决定目标标识符。
+
+    优先级:
+    1. dst_ip —— IP→IP 攻击拓扑(最直接)
+    2. username —— 账号爆破/异常登录类("user:admin")
+    3. url —— URL 资源类,提取一级路径("asset:/admin")
+    """
+    if alert.dst_ip:
+        return alert.dst_ip
+    if alert.username:
+        return f"user:{alert.username}"
+    if alert.url:
+        # 提取 URL 一级路径(作为资源标识)
+        path = alert.url.split("?")[0].split("/")[1] if "/" in alert.url else alert.url
+        return f"asset:/{path}" if path else None
+    return None
+
+
+def build_relations(src_ip: str | None = None, time_window_minutes: int | None = None) -> dict:
     """构建资产间的关联关系（攻击拓扑）
 
-    基于告警数据：同一源IP在时间窗口内攻击多个不同目标，形成关联关系
-    """
-    now = datetime.now(timezone.utc)
-    window_start = now - timedelta(minutes=time_window_minutes)
+    基于告警数据：同一源IP在时间窗口内攻击多个不同目标，形成关联关系。
 
-    query = Alert.query.filter(
-        Alert.event_time >= window_start,
-    )
+    Args:
+        time_window_minutes: 时间窗口(分钟)。
+            None 或 0 = 查询全部历史告警(推荐用于演示数据 / 关联关系是历史累积的)
+            具体数值 = 只查最近 N 分钟的告警(生产环境用)
+    """
+    query = Alert.query
+    if time_window_minutes:
+        now = datetime.now(timezone.utc)
+        window_start = now - timedelta(minutes=time_window_minutes)
+        query = query.filter(Alert.event_time >= window_start)
+
     if src_ip:
         query = query.filter(Alert.src_ip == src_ip)
 
@@ -132,7 +156,7 @@ def build_relations(src_ip: str | None = None, time_window_minutes: int = 60) ->
     ip_targets = defaultdict(lambda: defaultdict(list))
     for alert in alerts:
         src = alert.src_ip or "unknown"
-        dst = alert.dst_ip or alert.asset or ""
+        dst = _resolve_target(alert)
         if dst:
             ip_targets[src][dst].append(alert.id)
 

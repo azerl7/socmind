@@ -40,7 +40,8 @@ def discover_assets_api():
 def build_relations_api():
     """构建资产关联关系"""
     src_ip = request.json.get("src_ip") if request.is_json else None
-    time_window = request.json.get("time_window_minutes", 60) if request.is_json else 60
+    # 默认 None = 查全部历史告警(资产关联是累积的)
+    time_window = request.json.get("time_window_minutes") if request.is_json else None
     result = build_relations(src_ip=src_ip, time_window_minutes=time_window)
     return jsonify({"code": 0, "data": result})
 
