@@ -13,7 +13,13 @@ logger = logging.getLogger(__name__)
 def _record_login(username, ip, ua, result, reason=None):
     """记录登录尝试"""
     try:
-        log = LoginLog(...)
+        log = LoginLog(
+            username=username,
+            ip_address=ip or "unknown",
+            user_agent=(ua or "")[:256],
+            result=result,
+            fail_reason=reason,
+        )
         db.session.add(log)
         db.session.commit()
     except Exception as e:
